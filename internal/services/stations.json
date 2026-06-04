@@ -1,0 +1,732 @@
+{
+  "stations": [
+    {
+      "id": "tr-trt-fm",
+      "name": "TRT FM",
+      "country": "Türkiye",
+      "genre": "Pop/Türkçe",
+      "url": "https://rd-trtfm.medya.trt.com.tr/master.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-trt-radyo1",
+      "name": "TRT Radyo 1",
+      "country": "Türkiye",
+      "genre": "Haber/Kültür",
+      "url": "https://rd-trtradyo1.medya.trt.com.tr/master.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-trt-radyo3",
+      "name": "TRT Radyo 3",
+      "country": "Türkiye",
+      "genre": "Klasik/Caz",
+      "url": "https://rd-trtradyo3.medya.trt.com.tr/master.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-trt-nagme",
+      "name": "TRT Nağme",
+      "country": "Türkiye",
+      "genre": "Türk Sanat Müziği",
+      "url": "https://rd-trtnagme.medya.trt.com.tr/master.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-trt-turku",
+      "name": "TRT Türkü",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "https://rd-trtturku.medya.trt.com.tr/master.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-trtradyohaber",
+      "name": "TRT Radyo Haber",
+      "country": "Türkiye",
+      "genre": "Haber",
+      "url": "https://rd-trtradyohaber.medya.trt.com.tr/master.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-powerturk",
+      "name": "PowerTürk",
+      "country": "Türkiye",
+      "genre": "Türkçe Pop",
+      "url": "https://listen.powerapp.com.tr/powerturk/mpeg/icecast.audio",
+      "favorite": false
+    },
+    {
+      "id": "tr-powerfm",
+      "name": "Power FM",
+      "country": "Türkiye",
+      "genre": "Pop/Dance",
+      "url": "https://listen.powerapp.com.tr/powerfm/mpeg/icecast.audio",
+      "favorite": false
+    },
+    {
+      "id": "tr-powerlove",
+      "name": "Power Love",
+      "country": "Türkiye",
+      "genre": "Slow/Romantik",
+      "url": "https://listen.powerapp.com.tr/powerlove/mpeg/icecast.audio",
+      "favorite": false
+    },
+    {
+      "id": "tr-powerpop",
+      "name": "Power Pop",
+      "country": "Türkiye",
+      "genre": "Pop",
+      "url": "https://listen.powerapp.com.tr/powerpop/mpeg/icecast.audio",
+      "favorite": false
+    },
+    {
+      "id": "tr-kralmuzik",
+      "name": "Kral FM",
+      "country": "Türkiye",
+      "genre": "Türkçe Pop",
+      "url": "https://dygvideo.dygdigital.com/kralfm/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-kralpop",
+      "name": "Kral Pop",
+      "country": "Türkiye",
+      "genre": "Pop",
+      "url": "https://dygvideo.dygdigital.com/kralpop/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-slowturk",
+      "name": "SlowTürk",
+      "country": "Türkiye",
+      "genre": "Slow/Romantik",
+      "url": "https://radyo.duhnet.tv/ak_dtvh_slowturk",
+      "favorite": false
+    },
+    {
+      "id": "tr-joyturk",
+      "name": "JoyTürk",
+      "country": "Türkiye",
+      "genre": "Pop/Slow",
+      "url": "https://playerservices.streamtheworld.com/api/livestream-redirect/JOY_TURK_SC",
+      "favorite": false
+    },
+    {
+      "id": "tr-joyfm",
+      "name": "Joy FM",
+      "country": "Türkiye",
+      "genre": "Yabancı Pop",
+      "url": "https://playerservices.streamtheworld.com/api/livestream-redirect/JOY_FM_SC",
+      "favorite": false
+    },
+    {
+      "id": "tr-superfm",
+      "name": "Süper FM",
+      "country": "Türkiye",
+      "genre": "Türkçe Pop",
+      "url": "https://playerservices.streamtheworld.com/api/livestream-redirect/SUPER_FM_SC",
+      "favorite": false
+    },
+    {
+      "id": "tr-metro",
+      "name": "Metro FM",
+      "country": "Türkiye",
+      "genre": "Dance/Electronic",
+      "url": "https://playerservices.streamtheworld.com/api/livestream-redirect/METRO_FM_SC",
+      "favorite": false
+    },
+    {
+      "id": "tr-radyod",
+      "name": "Radyo D",
+      "country": "Türkiye",
+      "genre": "Pop",
+      "url": "https://moondigitaledge2.radyotvonline.net/radyod/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-radyoeksen",
+      "name": "Radyo Eksen",
+      "country": "Türkiye",
+      "genre": "Rock/Indie",
+      "url": "https://dygedge.radyotvonline.net/radyoeksen/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-ntvradyo",
+      "name": "NTV Radyo",
+      "country": "Türkiye",
+      "genre": "Haber/Kültür",
+      "url": "https://dygvideo.dygdigital.com/ntvradyo/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-radyospor",
+      "name": "Radyo Spor",
+      "country": "Türkiye",
+      "genre": "Spor",
+      "url": "https://moondigitaledge.radyotvonline.net/radyospor/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-palfm",
+      "name": "Pal FM",
+      "country": "Türkiye",
+      "genre": "Pop",
+      "url": "https://ssl4.radyotvonline.com/radyohome/palfmhome.stream/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-palstation",
+      "name": "Pal Station",
+      "country": "Türkiye",
+      "genre": "Yabancı Pop",
+      "url": "http://shoutcast.radyogrup.com:1020/stream",
+      "favorite": true
+    },
+    {
+      "id": "tr-palnostalji",
+      "name": "Pal Nostalji",
+      "country": "Türkiye",
+      "genre": "Nostalji",
+      "url": "https://moondigitaledge.radyotvonline.net/palnostalji/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-paldoga",
+      "name": "Pal Doğa",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "http://shoutcast.radyogrup.com:1040/stream",
+      "favorite": false
+    },
+    {
+      "id": "tr-alemfm",
+      "name": "Alem FM",
+      "country": "Türkiye",
+      "genre": "Pop/Sohbet",
+      "url": "https://turkmedya.radyotvonline.net/alemfmaac",
+      "favorite": false
+    },
+    {
+      "id": "tr-showradyo",
+      "name": "Show Radyo",
+      "country": "Türkiye",
+      "genre": "Pop",
+      "url": "https://edge1.radyotvonline.net/shoutcast/play/showradyo",
+      "favorite": false
+    },
+    {
+      "id": "tr-radyoviva",
+      "name": "Radyo Viva",
+      "country": "Türkiye",
+      "genre": "Pop",
+      "url": "https://edge1.radyotvonline.net/shoutcast/play/radyoviva",
+      "favorite": false
+    },
+    {
+      "id": "tr-haberturk",
+      "name": "Habertürk Radyo",
+      "country": "Türkiye",
+      "genre": "Haber/Talk",
+      "url": "https://moondigitaledge.radyotvonline.net/haberturkradyo/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-kafaradyo",
+      "name": "Kafa Radyo",
+      "country": "Türkiye",
+      "genre": "Pop/Sohbet",
+      "url": "https://moondigitalmaster.radyotvonline.net/kafaradyo/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-fenomen",
+      "name": "Radyo Fenomen",
+      "country": "Türkiye",
+      "genre": "Pop/Dance",
+      "url": "https://live.radyofenomen.com/fenomen/128/icecast.audio",
+      "favorite": false
+    },
+    {
+      "id": "tr-bestfm",
+      "name": "Best FM",
+      "country": "Türkiye",
+      "genre": "Pop",
+      "url": "https://ssldyg.radyotvonline.com/best/bestfm.stream/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-babaradyo",
+      "name": "Baba Radyo",
+      "country": "Türkiye",
+      "genre": "Arabesk",
+      "url": "http://officialbabaradyo.radyotvonline.net/babaofficial",
+      "favorite": false
+    },
+    {
+      "id": "tr-arabeskturk",
+      "name": "Arabesk FM",
+      "country": "Türkiye",
+      "genre": "Arabesk",
+      "url": "http://yayin.arabeskfm.biz:8042/stream",
+      "favorite": false
+    },
+    {
+      "id": "tr-virgin",
+      "name": "Virgin Radio TR",
+      "country": "Türkiye",
+      "genre": "Pop/Rock",
+      "url": "https://playerservices.streamtheworld.com/api/livestream-redirect/VIRGIN_RADIOAAC_SC",
+      "favorite": false
+    },
+    {
+      "id": "tr-joyturk-rock",
+      "name": "JoyTürk Rock",
+      "country": "Türkiye",
+      "genre": "Rock/Indie",
+      "url": "https://playerservices.streamtheworld.com/api/livestream-redirect/JOYTURK_ROCK_SC",
+      "favorite": false
+    },
+    {
+      "id": "tr-radyo-odtu-rock",
+      "name": "Radyo ODTÜ Rock",
+      "country": "Türkiye",
+      "genre": "Rock/Indie",
+      "url": "https://stream3.radyoodtu.com.tr:8000/rock",
+      "favorite": false
+    },
+    {
+      "id": "tr-karadenizfm",
+      "name": "Karadeniz FM",
+      "country": "Türkiye",
+      "genre": "Karadeniz Müziği",
+      "url": "https://moondigitaledge.radyotvonline.net/karadenizfm/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-trt-trabzon",
+      "name": "TRT Trabzon",
+      "country": "Türkiye",
+      "genre": "Karadeniz Müziği",
+      "url": "https://radio-trttrabzon.medya.trt.com.tr/master.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-seymen",
+      "name": "Radyo Seymen",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "https://yayin.radyoseymen.com.tr:1070/stream",
+      "favorite": false
+    },
+    {
+      "id": "tr-ekin",
+      "name": "Radyo Ekin",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "http://yayin.turkhosted.com:6006/stream",
+      "favorite": false
+    },
+    {
+      "id": "tr-turkulerle-turkiye",
+      "name": "Türkülerle Türkiye",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "http://37.247.98.8/stream/22/",
+      "favorite": false
+    },
+    {
+      "id": "tr-turkuvaz-anadolu",
+      "name": "Turkuvaz Anadolu",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "http://trkvz-radyolar.ercdn.net/turkuvazanadolu/Playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-munzur",
+      "name": "Radyo Munzur",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "http://yayin1.yayindakiler.com:3002/stream",
+      "favorite": false
+    },
+    {
+      "id": "tr-turkuradyo",
+      "name": "Türkü Radyo",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "http://radyo.turkuradyo.net:4591/turkuradyo",
+      "favorite": false
+    },
+    {
+      "id": "tr-cemradyo",
+      "name": "Cem Radyo",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "https://erzincan.80.yayin.com.tr/stream",
+      "favorite": false
+    },
+    {
+      "id": "tr-canradyo",
+      "name": "Can Radyo",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "http://yayin1.yayindakiler.com:3124/stream",
+      "favorite": false
+    },
+    {
+      "id": "tr-radyobanko",
+      "name": "Radyo Banko",
+      "country": "Türkiye",
+      "genre": "Türk Halk Müziği",
+      "url": "http://yayin.netradyom.com:8050/RADYOBANKO",
+      "favorite": false
+    },
+    {
+      "id": "uk-bbc-radio1",
+      "name": "BBC Radio 1",
+      "country": "İngiltere",
+      "genre": "Pop/Rock",
+      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_one",
+      "favorite": false
+    },
+    {
+      "id": "uk-bbc-radio2",
+      "name": "BBC Radio 2",
+      "country": "İngiltere",
+      "genre": "Adult Contemporary",
+      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_two",
+      "favorite": false
+    },
+    {
+      "id": "uk-bbc-radio3",
+      "name": "BBC Radio 3",
+      "country": "İngiltere",
+      "genre": "Classical",
+      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_three",
+      "favorite": false
+    },
+    {
+      "id": "uk-bbc-radio4",
+      "name": "BBC Radio 4",
+      "country": "İngiltere",
+      "genre": "Talk/News",
+      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_fourfm",
+      "favorite": false
+    },
+    {
+      "id": "uk-bbc-6music",
+      "name": "BBC 6 Music",
+      "country": "İngiltere",
+      "genre": "Alternative",
+      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_6music",
+      "favorite": false
+    },
+    {
+      "id": "uk-bbc-1xtra",
+      "name": "BBC 1Xtra",
+      "country": "İngiltere",
+      "genre": "Hip Hop/R&B",
+      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_1xtra",
+      "favorite": false
+    },
+    {
+      "id": "world-radio-paradise",
+      "name": "Radio Paradise",
+      "country": "ABD",
+      "genre": "Eclectic/Rock",
+      "url": "http://stream.radioparadise.com/aac-128",
+      "favorite": false
+    },
+    {
+      "id": "us-kexp",
+      "name": "KEXP 90.3 FM",
+      "country": "ABD",
+      "genre": "Indie/Alternative",
+      "url": "https://kexp.streamguys1.com/kexp160.aac",
+      "favorite": false
+    },
+    {
+      "id": "us-wfmu",
+      "name": "WFMU",
+      "country": "ABD",
+      "genre": "Freeform",
+      "url": "https://stream0.wfmu.org/freeform-128k.mp3",
+      "favorite": false
+    },
+    {
+      "id": "us-jazz24",
+      "name": "Jazz24",
+      "country": "ABD",
+      "genre": "Jazz",
+      "url": "https://knkx-live-a.edge.audiocdn.com/6285_128k/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "us-klassik",
+      "name": "WQXR Classical",
+      "country": "ABD",
+      "genre": "Classical",
+      "url": "https://stream.wqxr.org/wqxr-web",
+      "favorite": false
+    },
+    {
+      "id": "us-soma-groovesalad",
+      "name": "SomaFM Groove Salad",
+      "country": "ABD",
+      "genre": "Ambient/Chill",
+      "url": "https://ice5.somafm.com/groovesalad-128-mp3",
+      "favorite": false
+    },
+    {
+      "id": "us-soma-defcon",
+      "name": "SomaFM DEF CON",
+      "country": "ABD",
+      "genre": "Electronic",
+      "url": "https://ice6.somafm.com/defcon-128-aac",
+      "favorite": false
+    },
+    {
+      "id": "us-soma-dronezone",
+      "name": "SomaFM Drone Zone",
+      "country": "ABD",
+      "genre": "Ambient/Space",
+      "url": "https://ice2.somafm.com/dronezone-256-mp3",
+      "favorite": false
+    },
+    {
+      "id": "world-soma-lush",
+      "name": "SomaFM Lush",
+      "country": "İnternet",
+      "genre": "Sensuous/Chill",
+      "url": "https://ice2.somafm.com/lush-128-mp3",
+      "favorite": false
+    },
+    {
+      "id": "world-soma-cliqhop",
+      "name": "SomaFM Cliqhop",
+      "country": "İnternet",
+      "genre": "IDM/Electronic",
+      "url": "https://ice2.somafm.com/cliqhop-128-mp3",
+      "favorite": false
+    },
+    {
+      "id": "fr-fip",
+      "name": "FIP Radio",
+      "country": "Fransa",
+      "genre": "Eclectic",
+      "url": "https://icecast.radiofrance.fr/fip-midfi.mp3",
+      "favorite": false
+    },
+    {
+      "id": "fr-francemusique",
+      "name": "France Musique",
+      "country": "Fransa",
+      "genre": "Classical",
+      "url": "http://icecast.radiofrance.fr/francemusique-hifi.aac",
+      "favorite": false
+    },
+    {
+      "id": "fr-franceinter",
+      "name": "France Inter",
+      "country": "Fransa",
+      "genre": "Talk/Culture",
+      "url": "https://icecast.radiofrance.fr/franceinter-midfi.mp3",
+      "favorite": false
+    },
+    {
+      "id": "world-fip-electro",
+      "name": "FIP Electro",
+      "country": "Fransa",
+      "genre": "Electronic",
+      "url": "http://icecast.radiofrance.fr/fipelectro-hifi.aac",
+      "favorite": false
+    },
+    {
+      "id": "de-swr3",
+      "name": "SWR3",
+      "country": "Almanya",
+      "genre": "Pop/Rock",
+      "url": "https://liveradio.swr.de/sw282p3/swr3/play.mp3",
+      "favorite": false
+    },
+    {
+      "id": "de-swr1",
+      "name": "SWR1",
+      "country": "Almanya",
+      "genre": "Pop/Oldies",
+      "url": "https://liveradio.swr.de/sw282p3/swr1bw/play.mp3",
+      "favorite": false
+    },
+    {
+      "id": "de-dlfkultur",
+      "name": "Deutschlandfunk Kultur",
+      "country": "Almanya",
+      "genre": "Culture/Classical",
+      "url": "https://st02.sslstream.dlf.de/dlf/02/128/mp3/stream.mp3",
+      "favorite": false
+    },
+    {
+      "id": "it-rai-radio2",
+      "name": "RAI Radio 2",
+      "country": "İtalya",
+      "genre": "Pop/Entertainment",
+      "url": "http://icestreaming.rai.it/2.mp3",
+      "favorite": false
+    },
+    {
+      "id": "es-los40",
+      "name": "Los 40 Principales",
+      "country": "İspanya",
+      "genre": "Pop/Hits",
+      "url": "https://25633.live.streamtheworld.com/LOS40.mp3",
+      "favorite": false
+    },
+    {
+      "id": "nl-radio538",
+      "name": "Radio 538",
+      "country": "Hollanda",
+      "genre": "Pop/Dance",
+      "url": "https://22593.live.streamtheworld.com/RADIO538.mp3",
+      "favorite": false
+    },
+    {
+      "id": "ch-swissjazz",
+      "name": "Swiss Jazz",
+      "country": "İsviçre",
+      "genre": "Jazz",
+      "url": "http://stream.srg-ssr.ch/m/rsj/mp3_128",
+      "favorite": false
+    },
+    {
+      "id": "world-abc-lounge",
+      "name": "ABC Lounge",
+      "country": "Fransa",
+      "genre": "Lounge/Chillout",
+      "url": "http://ice.stream.frequence3.net/frequence3-128.mp3",
+      "favorite": false
+    },
+    {
+      "id": "world-chillout",
+      "name": "Chill Out Zone",
+      "country": "İnternet",
+      "genre": "Chillout/Lounge",
+      "url": "https://ice2.somafm.com/illstreet-128-mp3",
+      "favorite": false
+    },
+    {
+      "id": "world-deephouse",
+      "name": "Deep House Radio",
+      "country": "İnternet",
+      "genre": "Deep House",
+      "url": "https://ice2.somafm.com/deepspaceone-128-mp3",
+      "favorite": false
+    },
+    {
+      "id": "de-rock-antenne",
+      "name": "Rock Antenne",
+      "country": "Almanya",
+      "genre": "Rock/Indie",
+      "url": "http://mp3channels.webradio.rockantenne.de/rockantenne",
+      "favorite": false
+    },
+    {
+      "id": "world-rp-rock",
+      "name": "Radio Paradise Rock",
+      "country": "ABD",
+      "genre": "Rock/Indie",
+      "url": "http://stream.radioparadise.com/rock-320",
+      "favorite": false
+    },
+    {
+      "id": "it-virgin-classic",
+      "name": "Virgin Radio Classic Rock",
+      "country": "İtalya",
+      "genre": "Rock/Indie",
+      "url": "http://icy.unitedradio.it/VirginRockClassics.mp3",
+      "favorite": false
+    },
+    {
+      "id": "es-rock-fm",
+      "name": "Rock FM",
+      "country": "İspanya",
+      "genre": "Rock/Indie",
+      "url": "http://rockfm.cope.stream.flumotion.com/cope/rockfm/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "us-hard-rock-heaven",
+      "name": "Hard Rock Heaven",
+      "country": "ABD",
+      "genre": "Rock/Indie",
+      "url": "http://hydra.cdnstream.com/1521_128",
+      "favorite": false
+    },
+    {
+      "id": "nl-arrow-classic",
+      "name": "Arrow Classic Rock",
+      "country": "Hollanda",
+      "genre": "Rock/Indie",
+      "url": "http://stream.gal.io/arrow",
+      "favorite": false
+    },
+    {
+      "id": "uk-virgin-radio",
+      "name": "Virgin Radio UK",
+      "country": "İngiltere",
+      "genre": "Rock/Indie",
+      "url": "https://radio.virginradio.co.uk/stream",
+      "favorite": false
+    },
+    {
+      "id": "nz-the-sound",
+      "name": "The Sound",
+      "country": "Yeni Zelanda",
+      "genre": "Rock/Indie",
+      "url": "https://digitalstreams.mediaworks.nz/sound_net/playlist.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "uk-radio-caroline",
+      "name": "Radio Caroline",
+      "country": "İngiltere",
+      "genre": "Rock/Indie",
+      "url": "http://sc3.radiocaroline.net:8030/listen.m3u",
+      "favorite": false
+    },
+    {
+      "id": "tr-numberone",
+      "name": "Radyo Fenomen",
+      "country": "Türkiye",
+      "genre": "Pop/Dance",
+      "url": "https://live.radyofenomen.com/fenomen/128/icecast.audio",
+      "favorite": false
+    },
+    {
+      "id": "tr-radyo-kent",
+      "name": "Radyo Fenomen Pop",
+      "country": "Türkiye",
+      "genre": "Pop/Türkçe",
+      "url": "https://live.radyofenomen.com/fenomenpop/256/chunks.m3u8",
+      "favorite": false
+    },
+    {
+      "id": "tr-rock-kral",
+      "name": "İTÜ Radyosu Rock",
+      "country": "Türkiye",
+      "genre": "Rock/Indie",
+      "url": "https://stream3.radyoodtu.com.tr:8000/rock",
+      "favorite": false
+    },
+    {
+      "id": "world-trt-world",
+      "name": "BBC World Service",
+      "country": "World",
+      "genre": "News/Talk",
+      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service",
+      "favorite": false
+    }
+  ]
+}
