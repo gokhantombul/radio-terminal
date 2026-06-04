@@ -139,6 +139,40 @@ func (s *StationService) AddCustomStation(st models.RadioStation) {
 	s.saveCustomStations()
 }
 
+func (s *StationService) GetCustomStation(stationID string) *models.RadioStation {
+	if stationID == "" {
+		return nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	id := strings.ToLower(stationID)
+	for _, st := range s.customStations {
+		if strings.ToLower(st.ID) == id {
+			result := st
+			_, fav := s.favorites[result.ID]
+			result.Favorite = fav
+			return &result
+		}
+	}
+	return nil
+}
+
+func (s *StationService) UpdateCustomStation(st models.RadioStation) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i, existing := range s.customStations {
+		if strings.EqualFold(existing.ID, st.ID) {
+			s.customStations[i] = st
+			s.saveCustomStations()
+			return true
+		}
+	}
+	return false
+}
+
 func (s *StationService) RemoveCustomStation(stationID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -245,7 +279,10 @@ func (s *StationService) GetGenres() []string {
 		if st.Genre != "" {
 			parts := strings.Split(st.Genre, "/")
 			for _, p := range parts {
-				genresMap[strings.TrimSpace(p)] = struct{}{}
+				genre := strings.TrimSpace(p)
+				if genre != "" {
+					genresMap[genre] = struct{}{}
+				}
 			}
 		}
 	}

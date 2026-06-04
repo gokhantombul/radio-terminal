@@ -28,6 +28,7 @@ type InteractiveShell struct {
 	player         *player.AudioPlayer
 	running        bool
 	lastList       []models.RadioStation
+	onExit         func()
 }
 
 func NewInteractiveShell(ss *services.StationService, p *player.AudioPlayer) *InteractiveShell {
@@ -48,23 +49,24 @@ func (s *InteractiveShell) Register(name string, f CommandFunc, desc, category s
 	}
 }
 
+func (s *InteractiveShell) SetOnExit(f func()) {
+	s.onExit = f
+}
+
 func (s *InteractiveShell) Run() {
+	defer func() {
+		if s.onExit != nil {
+			s.onExit()
+		}
+	}()
+
 	ui.PrintBanner()
 	fmt.Printf("          %s\n\n", services.L.Get("welcome_msg"))
-
-	// Build completer
-	var items []readline.PrefixCompleterInterface
-	for name := range s.commands {
-		items = append(items, readline.PcItem(name))
-	}
-	items = append(items, readline.PcItem("help"), readline.PcItem("exit"), readline.PcItem("q"))
-
-	completer := readline.NewPrefixCompleter(items...)
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          s.getPrompt(),
 		HistoryFile:     "/tmp/radio-shell.history",
-		AutoComplete:    completer,
+		AutoComplete:    newRadioCompleter(s),
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
 	})
@@ -187,4 +189,110 @@ func (s *InteractiveShell) UpdateLastList(list []models.RadioStation) {
 
 func (s *InteractiveShell) GetLastList() []models.RadioStation {
 	return s.lastList
+}
+
+type radioCompleter struct {
+	shell *InteractiveShell
+}
+
+func newRadioCompleter(shell *InteractiveShell) readline.AutoCompleter {
+	return &radioCompleter{shell: shell}
+}
+
+func (c *radioCompleter) Do(line []rune, pos int) ([][]rune, int) {
+	if pos > len(line) {
+		pos = len(line)
+	}
+	text := string(line[:pos])
+	words := completionWords(text)
+	if len(words) <= 1 {
+		values := make([]string, 0, len(c.shell.commands)+4)
+		for name := range c.shell.commands {
+			values = append(values, name)
+		}
+		values = append(values, "help", "exit", "q", "?")
+		current := ""
+		if len(words) == 1 {
+			current = words[0]
+		}
+		return completionCandidates(current, values)
+	}
+
+	cmd := strings.ToLower(words[0])
+	current := words[len(words)-1]
+	if strings.HasPrefix(current, "-") {
+		return completionCandidates(current, flagSuggestions(cmd))
+	}
+
+	switch cmd {
+	case "cal", "kontrol", "favori", "sil", "duzenle":
+		var values []string
+		for _, st := range c.shell.stationService.GetAllStations() {
+			values = append(values, st.ID)
+		}
+		return completionCandidates(current, values)
+	case "ulke":
+		return completionCandidates(current, c.shell.stationService.GetCountries())
+	case "tur":
+		return completionCandidates(current, c.shell.stationService.GetGenres())
+	case "tema":
+		return completionCandidates(current, ui.GetThemes())
+	}
+
+	return nil, 0
+}
+
+func completionWords(text string) []string {
+	words := strings.Fields(text)
+	if strings.HasSuffix(text, " ") {
+		words = append(words, "")
+	}
+	return words
+}
+
+func completionCandidates(current string, values []string) ([][]rune, int) {
+	sort.Strings(values)
+	offset := len([]rune(current))
+	currentLower := strings.ToLower(current)
+	seen := make(map[string]struct{}, len(values))
+	var out [][]rune
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		if strings.HasPrefix(strings.ToLower(value), currentLower) {
+			valueRunes := []rune(value)
+			if offset > len(valueRunes) {
+				continue
+			}
+			suffix := append([]rune{}, valueRunes[offset:]...)
+			suffix = append(suffix, ' ')
+			out = append(out, suffix)
+		}
+	}
+	return out, offset
+}
+
+func flagSuggestions(cmd string) []string {
+	switch cmd {
+	case "ulke", "tur", "cal", "favori", "kontrol", "dil", "lang":
+		return []string{"-i"}
+	case "ara", "ses":
+		return []string{"-s"}
+	case "karistir", "rastgele":
+		return []string{"-u", "-t"}
+	case "uyku":
+		return []string{"-d"}
+	case "iceaktar":
+		return []string{"-d", "-u", "-t", "-p"}
+	case "online-ara":
+		return []string{"-s", "-u", "-t", "-l"}
+	case "online-ekle":
+		return []string{"-n"}
+	}
+	return nil
 }

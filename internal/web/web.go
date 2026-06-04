@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"radio-shell/internal/models"
 	"radio-shell/internal/player"
 	"radio-shell/internal/services"
 	"strconv"
@@ -17,7 +18,20 @@ type WebServer struct {
 	systemService   *services.SystemService
 }
 
+type stationInfo struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Genre      string `json:"genre"`
+	Country    string `json:"country"`
+	IsFavorite bool   `json:"is_favorite"`
+}
+
 func NewWebServer(p *player.AudioPlayer, ss *services.StationService, set *services.SettingsService, sys *services.SystemService) *WebServer {
+	if !p.IsPlaying() {
+		p.SetVolume(set.GetVolume(), false)
+		p.SetMuted(set.IsMuted())
+	}
+
 	return &WebServer{
 		player:          p,
 		stationService:  ss,
@@ -40,9 +54,12 @@ func (ws *WebServer) Start(host string, port int) error {
 		api.POST("/volume/:level", ws.setVolume)
 		api.POST("/mute/:muted", ws.setMute)
 		api.POST("/favorite/:station_id", ws.toggleFavorite)
+		api.POST("/record/start", ws.startRecording)
+		api.POST("/record/stop", ws.stopRecording)
 		api.GET("/system", ws.getSystemInfo)
 		api.GET("/language", ws.getLanguage)
 		api.POST("/language/:lang_code", ws.setLanguage)
+		api.GET("/locales", ws.getLocales)
 	}
 
 	// Static files
@@ -53,15 +70,27 @@ func (ws *WebServer) Start(host string, port int) error {
 
 func (ws *WebServer) getStations(c *gin.Context) {
 	stations := ws.stationService.GetAllStations()
-	c.JSON(http.StatusOK, stations)
+	result := make([]stationInfo, 0, len(stations))
+	for _, st := range stations {
+		result = append(result, toStationInfo(st))
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 func (ws *WebServer) getStatus(c *gin.Context) {
 	station, song, vol, muted, playing, recording, elapsed := ws.player.GetStatus()
+	var currentStation *stationInfo
+	if station != nil {
+		info := toStationInfo(*station)
+		if fresh := ws.stationService.GetStation(station.ID); fresh != nil {
+			info.IsFavorite = fresh.Favorite
+		}
+		currentStation = &info
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"is_playing":      playing,
-		"current_station": station,
+		"current_station": currentStation,
 		"current_song":    song,
 		"volume":          vol,
 		"is_muted":        muted,
@@ -79,6 +108,7 @@ func (ws *WebServer) playStation(c *gin.Context) {
 	}
 
 	ws.player.Play(*st, ws.settingsService.GetVolume(), ws.settingsService.IsMuted())
+	ws.settingsService.SetLastStationID(st.ID)
 	c.JSON(http.StatusOK, gin.H{"status": "playing", "station": st.Name})
 }
 
@@ -100,7 +130,8 @@ func (ws *WebServer) setVolume(c *gin.Context) {
 		ws.settingsService.SetMuted(false)
 	}
 	ws.player.SetVolume(level, true)
-	c.JSON(http.StatusOK, gin.H{"status": "volume_set", "level": level})
+	_, _, _, muted, _, _, _ := ws.player.GetStatus()
+	c.JSON(http.StatusOK, gin.H{"status": "volume_set", "level": level, "is_muted": muted})
 }
 
 func (ws *WebServer) setMute(c *gin.Context) {
@@ -108,13 +139,46 @@ func (ws *WebServer) setMute(c *gin.Context) {
 	muted, _ := strconv.ParseBool(mutedStr)
 	ws.player.SetMuted(muted)
 	ws.settingsService.SetMuted(muted)
-	c.JSON(http.StatusOK, gin.H{"status": "muted_set", "is_muted": muted})
+	status := "unmuted"
+	if muted {
+		status = "muted"
+	}
+	c.JSON(http.StatusOK, gin.H{"status": status, "is_muted": muted})
 }
 
 func (ws *WebServer) toggleFavorite(c *gin.Context) {
 	id := c.Param("station_id")
-	added := ws.stationService.ToggleFavorite(id)
+	st := ws.stationService.GetStation(id)
+	if st == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Station not found"})
+		return
+	}
+	added := ws.stationService.ToggleFavorite(st.ID)
 	c.JSON(http.StatusOK, gin.H{"status": "success", "is_favorite": added})
+}
+
+func (ws *WebServer) startRecording(c *gin.Context) {
+	file, err := ws.player.StartRecording()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": recordingErrorMessage(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": services.L.Get("msg_recording_started", map[string]interface{}{"file": file}),
+	})
+}
+
+func (ws *WebServer) stopRecording(c *gin.Context) {
+	path := ws.player.StopRecording()
+	if path == "" {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": services.L.Get("msg_no_active_record")})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": services.L.Get("msg_recording_stopped", map[string]interface{}{"path": path}),
+	})
 }
 
 func (ws *WebServer) getSystemInfo(c *gin.Context) {
@@ -130,7 +194,36 @@ func (ws *WebServer) getLanguage(c *gin.Context) {
 
 func (ws *WebServer) setLanguage(c *gin.Context) {
 	langCode := c.Param("lang_code")
+	if _, ok := services.L.GetLanguages()[langCode]; !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Language not supported"})
+		return
+	}
 	ws.settingsService.SetLanguage(langCode)
 	services.L.SetLanguage(langCode)
 	c.JSON(http.StatusOK, gin.H{"status": "success", "language": langCode})
+}
+
+func (ws *WebServer) getLocales(c *gin.Context) {
+	c.JSON(http.StatusOK, services.L.GetStrings())
+}
+
+func toStationInfo(st models.RadioStation) stationInfo {
+	return stationInfo{
+		ID:         st.ID,
+		Name:       st.Name,
+		Genre:      st.Genre,
+		Country:    st.Country,
+		IsFavorite: st.Favorite,
+	}
+}
+
+func recordingErrorMessage(err error) string {
+	switch err.Error() {
+	case "not playing":
+		return services.L.Get("msg_not_playing")
+	case "already recording":
+		return services.L.Get("msg_already_recording")
+	default:
+		return services.L.Get("msg_recording_failed", map[string]interface{}{"error": err})
+	}
 }

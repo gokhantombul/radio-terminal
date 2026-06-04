@@ -46,8 +46,6 @@ func (s *StatisticsService) RecordSession(station models.RadioStation, duration 
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	sid := station.ID
 	if stat, ok := s.stats[sid]; ok {
 		stat.TotalSeconds += seconds
@@ -63,10 +61,16 @@ func (s *StatisticsService) RecordSession(station models.RadioStation, duration 
 			SessionCount: 1,
 		}
 	}
+	s.mu.Unlock()
+
 	s.Save()
 }
 
 func (s *StatisticsService) GetTopStations(limit int) []StationStat {
+	if limit <= 0 {
+		return []StationStat{}
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -134,7 +138,7 @@ func (s *StatisticsService) Load() {
 }
 
 func (s *StatisticsService) Save() {
-	top := s.GetTopStations(len(s.stats))
+	top := s.GetTopStations(int(^uint(0) >> 1))
 	data, err := json.MarshalIndent(top, "", "  ")
 	if err != nil {
 		return
