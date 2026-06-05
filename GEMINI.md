@@ -1,69 +1,108 @@
-# Project: Radio Shell (Python)
+# Project: Radio Terminal (Go)
 
-Terminal-based FM radio player specializing in Turkish and global radio stations. A robust, feature-rich CLI application with interactive shell, recording capabilities, and extensive station management.
+Terminal FM radio player for local and global stations. The current codebase is
+Go, with a Bubble Tea TUI as the default interface and an optional Gin web UI.
 
-## Architectural Overview
+## Run, Test, Develop
 
-The project is structured as a modular, layered CLI application:
+- Build: `go build -o radio ./cmd/radio`
+- Run existing binary: `./radio`
+- Run without building: `go run ./cmd/radio`
+- Start web UI: `./radio --web`
+- Start web UI in foreground: `./radio --web --foreground`
+- Stop background web UI: `./radio --kill`
+- Tests: `go test ./...`
+- If the Go cache is not writable: `GOCACHE=/tmp/go-build go test ./...`
+- Runtime dependencies: `ffplay` for playback and `ffmpeg` for the `kaydet`
+  recording command.
+- Adding dependencies: use `go get` or `go mod tidy`; commit `go.mod` and
+  `go.sum` together.
 
-1.  **Entry Point (`src/radio/main.py`):** Orchestrates service initialization, dependency injection, and lifecycle management.
-2.  **Shell Layer (`src/radio/shell.py`, `commands_*.py`):** Powered by `prompt_toolkit`.
-    *   **Interactive REPL:** Custom auto-completion (RadioCompleter) for stations, genres, and countries.
-    *   **Command Modules:**
-        *   `commands_basic.py`: Listing, search, and navigation.
-        *   `commands_playback.py`: Playback controls (volume, play/stop), song history tracking.
-        *   `commands_management.py`: CRUD for custom stations, favorites, themes, and online search.
-3.  **Service Layer (`src/radio/services/`):** Encapsulated business logic.
-    *   `StationService`: Merges built-in JSON stations with user-defined custom stations.
-    *   `RadioBrowserService`: Global station discovery via radio-browser.info API.
-    *   `SettingsService`: Persists user preferences (volume, last station, notifications).
-    *   `StatisticsService`: Tracks listening sessions and usage metrics.
-    *   `NotificationService`: Desktop notifications for song changes (Linux/macOS).
-    *   `SystemService`: Monitors process memory and child process (ffplay) health.
-4.  **Player Layer (`src/radio/player.py`):**
-    *   **Playback:** Manages `ffplay` subprocess with asynchronous stderr monitoring for ICY metadata (Song titles).
-    *   **Watchdog:** Automated reconnection logic for unstable streams.
-    *   **Recording:** Dedicated `ffmpeg` process with real-time transcoding to MP3 (128kbps) and reconnection handling.
-5.  **UI Layer (`src/radio/ui.py`):** Rich terminal output management.
-    *   Uses `rich` for tables, panels, and styled output.
-    *   Supports multiple color themes (Ocean, Forest, Classic, etc.).
-    *   Interactive status bar with playback info and recording indicators.
+There is no Python `src/radio`, `venv`, `requirements.txt`, or `pytest` test
+suite in this checkout. Do not document or edit old Python paths unless they are
+reintroduced deliberately.
 
-## Tech Stack
+## Architecture
 
-*   **Language:** Python 3.10+ (Current: 3.14)
-*   **REPL:** `prompt_toolkit` (Interactive shell with history and completion)
-*   **UI/Formatting:** `rich` (Tables, colors, progress bars)
-*   **Audio Engines:**
-    *   `ffplay`: Core playback engine.
-    *   `ffmpeg`: Recording and transcoding (MP3).
-*   **Testing:** `pytest` (Unit and integration tests)
-*   **Containerization:** Docker (Multi-stage build support)
+Everything is wired manually from `cmd/radio/main.go` through `internal/app`.
+`app.Run` parses flags, builds `RadioConfig`, ensures `~/.radio-shell`, selects
+language on first interactive run, instantiates services, creates `AudioPlayer`,
+then starts either the Bubble Tea TUI or the Gin web server.
 
-## Development Workflows
+Main layers:
 
-### Setup & Run
-*   **Launcher:** Execute `./radio.sh` (Linux/macOS) or `radio.bat` (Windows).
-*   **Manual Start:** `export PYTHONPATH=. && python3 -m src.radio.main`
-*   **Dependencies:** Managed via `requirements.txt`.
+1. **App (`internal/app`)** - CLI flags, language bootstrap, web background
+   process management, browser opening, and top-level lifecycle.
+2. **TUI (`internal/tui`)** - full-screen Bubble Tea model. It implements
+   `shell.CommandHost`, captures command output with `ui.WithOutputAndWidth`,
+   maintains the station panel, command output panel, suggestions, history, and
+   footer status.
+3. **Shell commands (`internal/shell`)** - central command registry and command
+   handlers. `RegisterAllCommands` is the source of truth for command names,
+   categories, descriptions, aliases, song-history tracking, sleep timer, and
+   session recording hooks.
+4. **Services (`internal/services`)** - data and OS integration with no TUI
+   imports. Includes station storage, settings, statistics, notifications,
+   system stats, localization, and RadioBrowser API search.
+5. **Player (`internal/player`)** - manages `ffplay` playback, scrapes ICY
+   metadata and stream info from stderr, restarts failed playback up to three
+   times, and records active streams with `ffmpeg`.
+6. **Web (`internal/web`)** - Gin API plus embedded static files from
+   `internal/web/static`. Uses the same player, settings, station, and system
+   services as the TUI.
+7. **UI (`internal/ui`)** - shared terminal output helpers and terminal themes.
 
-### Testing
-*   **Run Tests:** `export PYTHONPATH=. && pytest tests/`
-*   Ensure 100% coverage for new service logic and command handlers.
+Dependency direction should stay one-way: app wires everything, command/UI
+layers call services/player, and services depend only on config/models and
+standard or external infrastructure packages.
 
-## Coding Conventions & Style
+## Commands
 
-*   **Naming:** PEP 8 strict adherence.
-*   **UI/UX:** Always use `src/radio/ui.py` wrappers. Never use `print()`.
-*   **Concurrency:** Use `threading` for background monitoring; avoid blocking the main REPL loop.
-*   **Localization:** Primary language is Turkish. Use UTF-8 for all strings.
+`RegisterAllCommands` currently registers these user-facing commands:
 
-## Persistence
+- Listing/search: `listele`, `turkiye`, `ulkeler`, `ulke`, `turler`, `tur`,
+  `ara`, `online-ara`
+- Playback: `cal`, `son`, `dur`, `durdur`, `durum`, `ses`, `sessiz`, `mute`,
+  `sonraki`, `ileri`, `onceki`, `geri`, `karistir`, `rastgele`, `uyku`,
+  `gecmis`
+- Recording: `kaydet`, `kayitdur`
+- Management: `favori`, `favoriler`, `tema`, `kontrol`, `ekle`, `duzenle`,
+  `sil`, `iceaktar`, `bildirim`, `online-ekle`, `dil`, `lang`, `istatistik`,
+  `sistem`, `web`, `temizle`, `clear`
+- General commands handled by shells: `help`, `?`, `exit`, `q`, `quit`
 
-All state is stored in `~/.radio-shell/`:
-*   `favorites.json`: List of favorite station IDs.
-*   `custom-stations.json`: User-defined radio stations.
-*   `settings.json`: Volume, last station, notification flags.
-*   `stats.json`: Historical listening data.
-*   `theme`: Current UI theme name.
-*   `recordings/`: High-quality MP3 captures.
+Command arguments are parsed with Go `flag.FlagSet` using `flag.ContinueOnError`
+and discarded flag output. Keep usage errors explicit through `internal/ui`.
+
+## Persistent State
+
+All user state lives under `~/.radio-shell/`:
+
+- `favorites.json` - favorite station IDs.
+- `custom-stations.json` - custom station list in `models.StationList` format.
+- `settings.json` - volume, muted flag, last station, notifications, language.
+- `stats.json` - listening sessions of at least 30 seconds.
+- `theme` - selected terminal theme.
+- `recordings/` - MP3 recordings created by `kaydet`.
+- `web.pid` - PID and URL for the background web server.
+
+Built-in stations are embedded from `internal/services/stations.json`.
+
+## Coding Conventions
+
+- User-facing command names and default text are Turkish. Keep UTF-8 Turkish
+  characters intact.
+- Add new commands in `internal/shell/commands.go` by registering them in
+  `RegisterAllCommands`.
+- Add or update command description keys and translated strings in
+  `internal/services/localization.go`.
+- Update completion logic in `shell.FlagSuggestions`, `radioCompleter`, and TUI
+  completion helpers when new flags or argument vocabularies are added.
+- Use `internal/ui` output helpers for command output. The TUI relies on this
+  to capture command output into the right panel.
+- Keep services free of UI imports.
+- Do not rename web JSON keys casually; `SystemService.GetWebInfo` still emits
+  `python_version` for web compatibility even though the value is the Go
+  runtime version.
+- Existing `scripts/install-command.sh` and `scripts/install-command.ps1`
+  reference old launchers. Update the scripts before documenting or using them.

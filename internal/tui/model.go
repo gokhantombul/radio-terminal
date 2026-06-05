@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -46,18 +47,22 @@ type Model struct {
 	width  int
 	height int
 
-	stations      []models.RadioStation
-	lastList      []models.RadioStation
-	selected      int
-	scrollStart   int
-	commandLog    []string
-	commandHist   []string
-	historyCursor int
-	completionSet []string
-	completionIdx int
-	busy          bool
-	busyCommand   string
-	message       string
+	stations       []models.RadioStation
+	lastList       []models.RadioStation
+	selected       int
+	scrollStart    int
+	commandLog     []string
+	commandHist    []string
+	historyCursor  int
+	completionSet  []string
+	completionIdx  int
+	busy           bool
+	busyCommand    string
+	message        string
+	loadingID      string
+	loadingName    string
+	loadingStarted time.Time
+	loadingUntil   time.Time
 }
 
 type tickMsg time.Time
@@ -267,6 +272,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resize()
 		return m, nil
 	case tickMsg:
+		m.clearExpiredLoading(time.Time(msg))
 		m.refreshStations()
 		m.refreshSuggestions()
 		return m, tick()
@@ -447,6 +453,7 @@ func (m *Model) handleCommandLine(line string) (tea.Model, tea.Cmd) {
 
 	m.busy = true
 	m.busyCommand = line
+	m.maybeStartStationLoading(line)
 	return m, m.runCommand(line)
 }
 
@@ -463,10 +470,12 @@ func (m *Model) playSelectedCommand() tea.Cmd {
 			return commandResultMsg{line: "cal", output: "", err: fmt.Errorf("çalınacak istasyon yok")}
 		}
 	}
-	line := fmt.Sprintf("cal %s", m.stations[m.selected].ID)
+	st := m.stations[m.selected]
+	line := fmt.Sprintf("cal %s", st.ID)
 	m.commandHist = append(m.commandHist, line)
 	m.busy = true
 	m.busyCommand = line
+	m.startStationLoading(st)
 	return m.runCommand(line)
 }
 
@@ -752,7 +761,7 @@ func (m *Model) calculateLayout(headerHeight, inputHeight, footerHeight int) scr
 	layout := screenLayout{bodyHeight: bodyHeight}
 	if m.width >= 72 && bodyHeight >= 8 {
 		gap := 2
-		leftWidth := clamp(int(float64(m.width)*0.36), 24, 42)
+		leftWidth := clamp(int(float64(m.width)*0.42), 30, 52)
 		rightWidth := m.width - leftWidth - gap
 		if rightWidth < 34 {
 			rightWidth = 34
@@ -883,6 +892,7 @@ func (m *Model) renderStationPanel(width, height int) string {
 	innerWidth := max(10, width-4)
 	innerHeight := max(4, height-2)
 	title := sectionTitleStyle.Render("İstasyonlar")
+	loadingID, _, loading := m.stationLoading()
 	lastListLen := m.lastListLen()
 	if lastListLen > 0 {
 		title += " " + mutedStyle.Render(fmt.Sprintf("(%d filtreli)", len(m.stations)))
@@ -915,9 +925,14 @@ func (m *Model) renderStationPanel(width, height int) string {
 		if st.Favorite {
 			fav = "★"
 		}
-		stName := padRight(truncate(st.Name, 28), 28)
-		stCountry := truncate(firstNonEmpty(st.Country, "—"), 10)
-		line := fmt.Sprintf("%s %2d %s %s", fav, idx+1, stName, stCountry)
+		countryWidth := clamp(innerWidth/5, 8, 14)
+		nameWidth := max(8, innerWidth-countryWidth-8)
+		stName := padRight(truncate(st.Name, nameWidth), nameWidth)
+		stCountry := truncate(firstNonEmpty(st.Country, "—"), countryWidth)
+		line := fmt.Sprintf("%s %3d %s %s", fav, idx+1, stName, stCountry)
+		if loading && st.ID == loadingID {
+			line = truncate(line, max(1, innerWidth-14)) + " Yükleniyor..."
+		}
 		line = truncate(line, innerWidth)
 		if idx == m.selected {
 			lines = append(lines, selectedStationStyle.Width(innerWidth).Render(line))
@@ -951,19 +966,42 @@ func (m *Model) renderCommandOutputBox(width, height int) string {
 	if height <= 0 {
 		return ""
 	}
-	contentHeight := max(1, height-2)
 	title := sectionTitleStyle.Render("Komut Çıktısı")
-	viewHeight := max(0, contentHeight-1)
 	view := m.output.View()
-	if viewHeight == 0 {
+	if m.output.Height == 0 {
 		view = ""
+	}
+	lines := []string{title}
+	if loadingBar := m.renderCommandLoadingBar(max(1, width-4)); loadingBar != "" {
+		lines = append(lines, loadingBar)
+	}
+	if view != "" {
+		lines = append(lines, view)
 	}
 	outputBox := panelStyle.Copy().
 		Width(max(1, width-2)).
 		Height(max(1, height-2)).
 		BorderForeground(p.border).
-		Render(title + "\n" + view)
+		Render(strings.Join(lines, "\n"))
 	return outputBox
+}
+
+func (m *Model) renderCommandLoadingBar(width int) string {
+	if _, loadingName, loading := m.stationLoading(); !loading {
+		return ""
+	} else {
+		barWidth := clamp(width/4, 10, 18)
+		progress := m.loadingProgress(time.Now())
+		filled := int(progress * float64(barWidth))
+		if filled < 1 {
+			filled = 1
+		}
+		if filled > barWidth {
+			filled = barWidth
+		}
+		bar := "[" + strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled) + "]"
+		return infoStyle.Render(truncate(fmt.Sprintf("%s Bağlanıyor: %s", bar, loadingName), width))
+	}
 }
 
 func (m *Model) renderNowPlaying(width, height int) string {
@@ -972,7 +1010,12 @@ func (m *Model) renderNowPlaying(width, height int) string {
 	innerWidth := max(1, width-4)
 	innerHeight := max(1, height-2)
 	lines := []string{sectionTitleStyle.Render("Şimdi Çalıyor")}
-	if !playing || station == nil {
+	if _, loadingName, loading := m.stationLoading(); loading {
+		lines = append(lines, infoStyle.Render(truncate("Bağlanıyor: "+loadingName, innerWidth)))
+		if len(lines) < innerHeight-1 {
+			lines = append(lines, mutedStyle.Render(truncate("Yayın hazırlanıyor...", innerWidth)))
+		}
+	} else if !playing || station == nil {
 		lines = append(lines, mutedStyle.Render(truncate("Radyo duruyor. Sol listeden istasyon seçip Enter'a basın.", innerWidth)))
 	} else {
 		lines = append(lines, goodStyle.Render(truncate(station.Name, innerWidth)))
@@ -1015,14 +1058,22 @@ func (m *Model) renderNowPlaying(width, height int) string {
 
 func (m *Model) renderInput() string {
 	statusText := ""
-	if m.busy {
+	if _, loadingName, loading := m.stationLoading(); loading {
+		statusText = " Yükleniyor: " + loadingName
+	} else if m.busy {
 		statusText = " çalışıyor: " + m.busyCommand
 	} else if m.message != "" {
 		statusText = " " + m.message
 	}
 	innerWidth := max(1, m.width-4)
-	status := mutedStyle.Render(truncate(statusText, max(0, innerWidth-lipgloss.Width(m.input.View()))))
-	content := fitOutputLine(m.input.View()+status, innerWidth)
+	inputView := m.input.View()
+	content := fitOutputLine(inputView, innerWidth)
+	if statusText != "" {
+		statusMax := min(clamp(innerWidth/3, 18, 34), max(1, innerWidth-8))
+		status := mutedStyle.Render(truncate(statusText, statusMax))
+		inputMax := max(1, innerWidth-lipgloss.Width(status))
+		content = fitOutputLine(inputView, inputMax) + status
+	}
 	return inputStyle.Width(max(1, m.width-2)).Render(content)
 }
 
@@ -1031,7 +1082,9 @@ func (m *Model) renderFooter() string {
 	codec, bitrate, sampleRate := m.player.GetCodecInfo()
 
 	status := services.L.Get("stopped")
-	if playing && station != nil {
+	if _, loadingName, loading := m.stationLoading(); loading {
+		status = "Yükleniyor: " + loadingName
+	} else if playing && station != nil {
 		title := station.Name
 		if song != "" {
 			title += " · " + song
@@ -1119,6 +1172,84 @@ func (m *Model) commandOutputWidth() int {
 	return 78
 }
 
+func (m *Model) startStationLoading(st models.RadioStation) {
+	now := time.Now()
+	m.loadingID = st.ID
+	m.loadingName = st.Name
+	m.loadingStarted = now
+	m.loadingUntil = now.Add(2 * time.Second)
+}
+
+func (m *Model) maybeStartStationLoading(line string) {
+	parts, err := shellwords.Parse(line)
+	if err != nil || len(parts) == 0 || strings.ToLower(parts[0]) != "cal" {
+		return
+	}
+
+	idOrIdx := ""
+	for i := 1; i < len(parts); i++ {
+		part := parts[i]
+		if part == "-i" && i+1 < len(parts) {
+			idOrIdx = parts[i+1]
+			break
+		}
+		if strings.HasPrefix(part, "-") {
+			continue
+		}
+		idOrIdx = part
+		break
+	}
+	if idOrIdx == "" {
+		return
+	}
+
+	if idx, err := strconv.Atoi(idOrIdx); err == nil {
+		lastList := m.GetLastList()
+		if idx > 0 && idx <= len(lastList) {
+			m.startStationLoading(lastList[idx-1])
+			return
+		}
+	}
+	if st := m.stationService.GetStation(idOrIdx); st != nil {
+		m.startStationLoading(*st)
+	}
+}
+
+func (m *Model) stationLoading() (id, name string, ok bool) {
+	if m.loadingID == "" || !time.Now().Before(m.loadingUntil) {
+		return "", "", false
+	}
+	return m.loadingID, m.loadingName, true
+}
+
+func (m *Model) clearExpiredLoading(now time.Time) {
+	if m.loadingID == "" || now.Before(m.loadingUntil) {
+		return
+	}
+	m.loadingID = ""
+	m.loadingName = ""
+	m.loadingStarted = time.Time{}
+	m.loadingUntil = time.Time{}
+}
+
+func (m *Model) loadingProgress(now time.Time) float64 {
+	if m.loadingStarted.IsZero() || m.loadingUntil.IsZero() {
+		return 0
+	}
+	total := m.loadingUntil.Sub(m.loadingStarted)
+	if total <= 0 {
+		return 1
+	}
+	progress := float64(now.Sub(m.loadingStarted)) / float64(total)
+	if progress < 0 {
+		return 0
+	}
+	if progress > 1 {
+		return 1
+	}
+	return progress
+}
+
 func rightPanelHeights(height int) (int, int) {
 	if height <= 0 {
 		return 0, 0
@@ -1142,7 +1273,7 @@ func outputViewportSize(width, rightHeight int) (int, int) {
 	_, outputBoxHeight := rightPanelHeights(rightHeight)
 	innerWidth := max(1, width-4)
 	innerHeight := max(1, outputBoxHeight-2)
-	return innerWidth, max(1, innerHeight-1)
+	return innerWidth, max(1, innerHeight-2)
 }
 
 func normalizeCommandOutput(output string, width int) []string {

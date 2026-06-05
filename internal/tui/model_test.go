@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -248,6 +249,59 @@ func TestViewFitsTerminalSizes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLayoutUsesWiderStationPanel(t *testing.T) {
+	m := testModel(t)
+	m.width = 80
+	m.height = 24
+
+	layout := m.calculateLayout(1, 3, 1)
+
+	if !layout.sideBySide {
+		t.Fatalf("expected side-by-side layout")
+	}
+	if layout.leftWidth < 33 {
+		t.Fatalf("expected wider left station panel, got width %d", layout.leftWidth)
+	}
+}
+
+func TestPlaySelectedShowsLoadingState(t *testing.T) {
+	m := testModel(t)
+	m.width = 100
+	m.height = 24
+	m.resize()
+	if len(m.stations) == 0 {
+		t.Fatal("expected stations")
+	}
+
+	selected := m.stations[m.selected]
+	_ = m.playSelectedCommand()
+
+	id, name, loading := m.stationLoading()
+	if !loading {
+		t.Fatal("expected loading state after selecting a station")
+	}
+	if id != selected.ID || name != selected.Name {
+		t.Fatalf("loading state = (%q, %q), want (%q, %q)", id, name, selected.ID, selected.Name)
+	}
+	if got := m.renderInput(); !strings.Contains(got, "Yükleniyor") {
+		t.Fatalf("expected input to show loading, got %q", got)
+	}
+	if got := m.renderFooter(); !strings.Contains(got, "Yükleniyor") {
+		t.Fatalf("expected footer to show loading, got %q", got)
+	}
+	if got := m.renderStationPanel(50, 12); !strings.Contains(got, "Yükleniyor") {
+		t.Fatalf("expected station panel to show loading, got %q", got)
+	}
+	if got := m.renderCommandOutputBox(60, 12); !strings.Contains(got, "Bağlanıyor") || !strings.Contains(got, "[") {
+		t.Fatalf("expected command output to show loading bar, got %q", got)
+	}
+
+	m.clearExpiredLoading(time.Now().Add(3 * time.Second))
+	if _, _, loading := m.stationLoading(); loading {
+		t.Fatal("expected expired loading state to clear")
 	}
 }
 

@@ -1,43 +1,104 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with this repository.
 
-## Run, test, develop
+## Run, Test, Develop
 
-- Run the app: `./radio.sh` — creates `venv/` on first run, installs `requirements.txt`, sets `PYTHONPATH`, and execs `python3 -m src.radio.main`.
-- Run without the launcher: `PYTHONPATH=. ./venv/bin/python3 -m src.radio.main` (the shell needs an interactive TTY).
-- Tests: `pytest tests/` from the repo root. Single test: `pytest tests/test_completer.py::test_command_completion_substring`.
-- Adding a dependency: append to `requirements.txt`; the launcher only `pip install`s on first venv creation, so existing checkouts need a manual `./venv/bin/pip install -r requirements.txt` after pulling.
-- External runtime dependency: `ffplay` (audio playback) and `ffmpeg` (used by the `kaydet` recording command). `radio.sh` aborts if `ffplay` is missing.
+- Build: `go build -o radio ./cmd/radio`
+- Run existing binary: `./radio`
+- Run without building: `go run ./cmd/radio`
+- Start web UI: `./radio --web`
+- Start web UI in foreground: `./radio --web --foreground`
+- Stop background web UI: `./radio --kill`
+- Tests: `go test ./...`
+- If Go tries to write cache files outside the workspace, use
+  `GOCACHE=/tmp/go-build go test ./...`
+- Runtime dependencies: `ffplay` for playback and `ffmpeg` for MP3 recording.
+- Add dependencies with `go get` or `go mod tidy`; commit `go.mod` and
+  `go.sum` together.
 
-## Heads-up: README.md is stale
-
-`README.md` still describes the previous Java/Spring Shell/Maven implementation (`pom.xml`, `mvn clean package`, `src/main/java/...`). The current source of truth is the Python code under `src/radio/`. `GEMINI.md` describes the Python layout accurately. Don't edit Java paths in README without checking that they map to anything that exists.
+Do not use old Python instructions in this repository. There is no active
+`src/radio`, `venv`, `requirements.txt`, `pytest`, `radio.sh`, Maven, or Spring
+Shell implementation in the current tree.
 
 ## Architecture
 
-Everything is wired manually in `src/radio/main.py` — no DI framework. The flow is: build `RadioConfig`, instantiate services, instantiate `AudioPlayer`, instantiate `InteractiveShell`, then construct each `*Commands` class which registers its handlers against the shell as a side effect. `shell.run(player)` blocks; `player.stop()` runs on exit.
+The app is wired manually. `cmd/radio/main.go` calls `internal/app.Run`, which
+parses flags, builds `RadioConfig`, creates `~/.radio-shell` paths, prompts for
+language on first interactive run, constructs services, creates `AudioPlayer`,
+and starts either the Bubble Tea TUI or the Gin web server.
 
-Four layers, with strict direction of dependency (commands → services/player → models/config):
+Layers:
 
-1. **Shell (`shell.py`)** — `prompt_toolkit` REPL. `InteractiveShell.register(name, func, desc, category)` is the extension point; the `*Commands` constructors call it for each command. `RadioCompleter` does context-aware completion: for `cal`/`kontrol`/`favori`/`sil` it completes station IDs/names, for `ulke`/`tur`/`tema` it completes the respective vocabulary. The bottom toolbar polls `AudioPlayer` state every second (`refresh_interval=1.0`).
-2. **Commands (`commands_basic.py`, `commands_playback.py`, `commands_management.py`)** — each module is a class that takes its dependencies in `__init__` and registers Turkish-named commands. Arguments are parsed with `argparse` (catch `SystemExit` and show a usage hint via `ui.print_error`). `PlaybackCommands` hooks `player.on_song_change` to maintain a 50-entry song history and `BasicCommands.last_list` is shared so `sonraki`/`onceki` (next/prev) can iterate over whatever list was last shown.
-3. **Services (`src/radio/services/`)** — pure data/IO logic, no UI imports.
-   - `StationService` merges built-in stations from `src/main/resources/stations.json` (legacy Java path, still used by Python via fallback search in `_load_internal_stations`) with user custom stations from `~/.radio-shell/custom-stations.json`. The favorite flag is computed at read time by intersecting with `favorites.json`.
-   - `SettingsService` persists `UserSettings` (volume, last station, notifications) to `~/.radio-shell/settings.json`.
-   - `StatisticsService` records sessions ≥30s to `~/.radio-shell/stats.json`.
-   - `RadioBrowserService` queries `de1.api.radio-browser.info` for the `online-ara`/`online-ekle` commands.
-   - `NotificationService` shells out to `osascript` (macOS) or `notify-send` (Linux).
-   - `SystemService` uses `psutil` to report process + child (ffplay) memory.
-4. **Player (`player.py`)** — `AudioPlayer` spawns `ffplay` as a subprocess with `-loglevel info` so it can scrape ICY metadata (`StreamTitle:`) and stream info (codec, sample rate, bitrate) from stderr in a background thread. A second watchdog thread restarts ffplay up to 3 times on unexpected exit. Recording is a separate `ffmpeg` subprocess that transcodes the stream to MP3 (128k) and writes to `~/.radio-shell/recordings/`.
-5. **UI (`ui.py`)** — single `rich.Console`, four named themes, persisted to `~/.radio-shell/theme`. All user-facing output should go through `ui.print_error/success/info` or the table/banner helpers — do not use bare `print()`. Strings are Turkish; keep UTF-8 (Turkish characters like `İ`, `ü`, `ö` appear in headers).
+1. **App (`internal/app`)** - top-level lifecycle, flags, language bootstrap,
+   background web process handling, and browser opening.
+2. **TUI (`internal/tui`)** - default full-screen Bubble Tea interface. It
+   implements `shell.CommandHost`, captures `internal/ui` output into the right
+   panel, owns command history, suggestions, station selection, and footer
+   refresh.
+3. **Shell (`internal/shell`)** - central command registry and handlers.
+   `RegisterAllCommands` is the source of truth for command names, aliases,
+   categories, descriptions, session hooks, song history, and sleep timer.
+4. **Services (`internal/services`)** - data and OS integrations: stations,
+   settings, statistics, RadioBrowser, notifications, system metrics, and
+   localization.
+5. **Player (`internal/player`)** - `ffplay` subprocess management, ICY metadata
+   parsing, stream info parsing, watchdog restarts, and `ffmpeg` recording.
+6. **Web (`internal/web`)** - Gin router and embedded static assets under
+   `internal/web/static`.
+7. **UI (`internal/ui`)** - terminal output helpers and themes.
 
-## Persistent state
+Keep dependencies directed downward: app wires dependencies, TUI/shell command
+layers call services/player, and services depend only on config/models plus
+external infrastructure packages.
 
-All under `~/.radio-shell/`: `favorites.json`, `custom-stations.json`, `settings.json`, `stats.json`, `theme`, `recordings/`. `RadioConfig.ensure_dirs()` only creates `recordings/`; the JSON files are created lazily on first save by each service.
+## Command Surface
+
+Registered command names:
+
+- Listing/search: `listele`, `turkiye`, `ulkeler`, `ulke`, `turler`, `tur`,
+  `ara`, `online-ara`
+- Playback: `cal`, `son`, `dur`, `durdur`, `durum`, `ses`, `sessiz`, `mute`,
+  `sonraki`, `ileri`, `onceki`, `geri`, `karistir`, `rastgele`, `uyku`,
+  `gecmis`
+- Recording: `kaydet`, `kayitdur`
+- Management: `favori`, `favoriler`, `tema`, `kontrol`, `ekle`, `duzenle`,
+  `sil`, `iceaktar`, `bildirim`, `online-ekle`, `dil`, `lang`, `istatistik`,
+  `sistem`, `web`, `temizle`, `clear`
+- General shell commands: `help`, `?`, `exit`, `q`, `quit`
+
+Argument parsing uses `flag.FlagSet` with `flag.ContinueOnError`; flag output is
+discarded, so handlers should print concise usage errors through `internal/ui`.
+
+## Persistent State
+
+All persistent user data is under `~/.radio-shell/`:
+
+- `favorites.json`
+- `custom-stations.json`
+- `settings.json`
+- `stats.json`
+- `theme`
+- `recordings/`
+- `web.pid`
+
+`RadioConfig.EnsureDirs` creates the app directory and recordings directory.
+JSON files are created lazily when services save data. Built-in stations are
+embedded from `internal/services/stations.json`.
 
 ## Conventions
 
-- Command names and user-facing strings are Turkish. Internal identifiers, comments, and docstrings are English.
-- New command? Add it to a `commands_*.py` module and call `shell.register(...)` in that class's constructor. Also add it to the category lists in `InteractiveShell.print_help` (`shell.py`) or it won't show up in `help`.
-- Catch `SystemExit` around `argparse.parse_args(args)` — `argparse` calls `sys.exit` on bad input, which would otherwise kill the REPL.
+- User-facing commands and default UI text are Turkish; preserve UTF-8.
+- New command: add a handler in `internal/shell/commands.go`, register it in
+  `RegisterAllCommands`, add localization strings in
+  `internal/services/localization.go`, and update completions if needed.
+- Completion logic exists in `shell.FlagSuggestions`, `radioCompleter`, and the
+  TUI completion helpers.
+- Command output should use `internal/ui` helpers, not direct `fmt.Print`, so
+  TUI command capture keeps working.
+- Services should not import TUI or terminal UI packages.
+- Statistics record sessions only when playback duration is at least 30 seconds.
+- Web system info keeps the JSON key `python_version` for compatibility while
+  returning the Go runtime version.
+- `scripts/install-command.sh` and `scripts/install-command.ps1` still reference
+  legacy launchers. Fix them before relying on them.
