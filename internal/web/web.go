@@ -1,15 +1,21 @@
 package web
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"radio-shell/internal/models"
 	"radio-shell/internal/player"
 	"radio-shell/internal/services"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
+//go:embed static/*
+var staticFiles embed.FS
 
 type WebServer struct {
 	player          *player.AudioPlayer
@@ -41,8 +47,14 @@ func NewWebServer(p *player.AudioPlayer, ss *services.StationService, set *servi
 }
 
 func (ws *WebServer) Start(host string, port int) error {
+	r := ws.router()
+	return r.Run(fmt.Sprintf("%s:%d", host, port))
+}
+
+func (ws *WebServer) router() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery())
 
 	// API Routes
 	api := r.Group("/api")
@@ -62,10 +74,31 @@ func (ws *WebServer) Start(host string, port int) error {
 		api.GET("/locales", ws.getLocales)
 	}
 
-	// Static files
-	r.Static("/", "./internal/web/static")
+	r.GET("/", func(c *gin.Context) {
+		data, err := staticFiles.ReadFile("static/index.html")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "index not found"})
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+	})
+	r.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		http.FileServer(staticFileSystem()).ServeHTTP(c.Writer, c.Request)
+	})
 
-	return r.Run(fmt.Sprintf("%s:%d", host, port))
+	return r
+}
+
+func staticFileSystem() http.FileSystem {
+	static, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		panic(err)
+	}
+	return http.FS(static)
 }
 
 func (ws *WebServer) getStations(c *gin.Context) {

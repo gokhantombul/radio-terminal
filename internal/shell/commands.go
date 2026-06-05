@@ -45,7 +45,8 @@ type Commands struct {
 	webMu      sync.Mutex
 	webStarted bool
 
-	rng *rand.Rand
+	rng           *rand.Rand
+	browserOpener func(string)
 }
 
 type CommandHost interface {
@@ -55,7 +56,7 @@ type CommandHost interface {
 	GetLastList() []models.RadioStation
 }
 
-func RegisterAllCommands(sh CommandHost, ss *services.StationService, stats *services.StatisticsService, sys *services.SystemService, set *services.SettingsService, rb *services.RadioBrowserService, ns *services.NotificationService, p *player.AudioPlayer) {
+func RegisterAllCommands(sh CommandHost, ss *services.StationService, stats *services.StatisticsService, sys *services.SystemService, set *services.SettingsService, rb *services.RadioBrowserService, ns *services.NotificationService, p *player.AudioPlayer) *Commands {
 	c := &Commands{
 		shell:           sh,
 		stationService:  ss,
@@ -121,6 +122,7 @@ func RegisterAllCommands(sh CommandHost, ss *services.StationService, stats *ser
 
 	p.SetOnSongChange(c.recordSong)
 	sh.SetOnExit(c.recordSession)
+	return c
 }
 
 func newFlagSet(name string) *flag.FlagSet {
@@ -190,6 +192,11 @@ func (c *Commands) currentStation() *models.RadioStation {
 }
 
 func (c *Commands) openBrowser(url string) {
+	if c.browserOpener != nil {
+		c.browserOpener(url)
+		return
+	}
+
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":

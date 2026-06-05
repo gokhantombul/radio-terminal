@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -52,6 +53,8 @@ type Model struct {
 	commandLog    []string
 	commandHist   []string
 	historyCursor int
+	completionSet []string
+	completionIdx int
 	busy          bool
 	busyCommand   string
 	message       string
@@ -63,6 +66,17 @@ type commandResultMsg struct {
 	line   string
 	output string
 	err    error
+}
+
+type screenLayout struct {
+	bodyHeight           int
+	sideBySide           bool
+	leftWidth            int
+	rightWidth           int
+	stationHeight        int
+	rightHeight          int
+	outputViewportWidth  int
+	outputViewportHeight int
 }
 
 type palette struct {
@@ -267,6 +281,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
+		case "tab":
+			if m.completeInput() {
+				return m, nil
+			}
+			return m, m.updateInput(msg)
 		case "enter":
 			line := strings.TrimSpace(m.input.Value())
 			if line == "" {
@@ -291,14 +310,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.moveSelection(-1)
 				return m, nil
 			}
+			if m.hasInputSuggestions() {
+				return m, m.updateInput(msg)
+			}
 			m.recallHistory(-1)
+			m.refreshSuggestions()
 			return m, nil
 		case "down":
 			if strings.TrimSpace(m.input.Value()) == "" {
 				m.moveSelection(1)
 				return m, nil
 			}
+			if m.hasInputSuggestions() {
+				return m, m.updateInput(msg)
+			}
 			m.recallHistory(1)
+			m.refreshSuggestions()
 			return m, nil
 		case "pgup":
 			m.output.PageUp()
@@ -311,9 +338,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.handleCommandLine(fmt.Sprintf("favori %s", m.stations[m.selected].ID))
 			}
 		case "ctrl+n":
+			if strings.TrimSpace(m.input.Value()) != "" {
+				return m, m.updateInput(msg)
+			}
 			m.moveSelection(1)
 			return m, nil
 		case "ctrl+p":
+			if strings.TrimSpace(m.input.Value()) != "" {
+				return m, m.updateInput(msg)
+			}
 			m.moveSelection(-1)
 			return m, nil
 		}
@@ -332,6 +365,50 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m *Model) updateInput(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	m.refreshSuggestions()
+	return cmd
+}
+
+func (m *Model) hasInputSuggestions() bool {
+	return strings.TrimSpace(m.input.Value()) != "" && len(m.input.MatchedSuggestions()) > 0
+}
+
+func (m *Model) completeInput() bool {
+	currentValue := m.input.Value()
+	if len(m.completionSet) > 1 && m.completionIdx >= 0 && m.completionIdx < len(m.completionSet) && currentValue == m.completionSet[m.completionIdx] {
+		m.completionIdx = (m.completionIdx + 1) % len(m.completionSet)
+		m.input.SetValue(m.completionSet[m.completionIdx])
+		m.input.CursorEnd()
+		m.refreshSuggestions()
+		return true
+	}
+
+	if current := m.input.CurrentSuggestion(); current != "" {
+		m.completionSet = uniqueStrings(m.input.MatchedSuggestions())
+		m.completionIdx = indexOfString(m.completionSet, current)
+		m.input.SetValue(current)
+		m.input.CursorEnd()
+		m.refreshSuggestions()
+		return true
+	}
+
+	suggestions := uniqueStrings(m.completionSuggestions(m.input.Value()))
+	if len(suggestions) == 0 {
+		m.completionSet = nil
+		m.completionIdx = 0
+		return false
+	}
+	m.completionSet = suggestions
+	m.completionIdx = 0
+	m.input.SetValue(suggestions[0])
+	m.input.CursorEnd()
+	m.refreshSuggestions()
+	return true
+}
+
 func (m *Model) View() string {
 	if m.width <= 0 || m.height <= 0 {
 		return "Radio Terminal başlatılıyor..."
@@ -340,28 +417,13 @@ func (m *Model) View() string {
 	header := m.renderHeader()
 	input := m.renderInput()
 	footer := m.renderFooter()
+	layout := m.calculateLayout(lipgloss.Height(header), lipgloss.Height(input), lipgloss.Height(footer))
+	m.applyLayout(layout)
 
-	bodyHeight := m.height - lipgloss.Height(header) - lipgloss.Height(input) - lipgloss.Height(footer)
-	if bodyHeight < 8 {
-		bodyHeight = 8
-	}
-
-	leftWidth := max(30, int(float64(m.width)*0.38))
-	rightWidth := max(36, m.width-leftWidth-2)
-	if leftWidth+rightWidth+2 > m.width {
-		leftWidth = max(24, m.width/3)
-		rightWidth = max(28, m.width-leftWidth-2)
-	}
-
-	body := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		m.renderStationPanel(leftWidth, bodyHeight),
-		"  ",
-		m.renderRightPanel(rightWidth, bodyHeight),
-	)
+	body := m.renderBody(layout)
 
 	view := lipgloss.JoinVertical(lipgloss.Left, header, body, input, footer)
-	return appStyle.Width(m.width).Height(m.height).Render(view)
+	return strings.TrimRight(appStyle.Width(m.width).Height(m.height).Render(view), "\n")
 }
 
 func (m *Model) handleCommandLine(line string) (tea.Model, tea.Cmd) {
@@ -498,32 +560,153 @@ func (m *Model) refreshStations() {
 }
 
 func (m *Model) refreshSuggestions() {
-	current := m.input.Value()
-	words := strings.Fields(current)
+	suggestions := m.completionSuggestions(m.input.Value())
+	m.input.SetSuggestions(uniqueStrings(suggestions))
+}
+
+func (m *Model) completionSuggestions(current string) []string {
+	words := completionWords(current)
 	var suggestions []string
+	tokenStart := completionTokenStart(current)
+	token := current[tokenStart:]
+	prefix := current[:tokenStart]
 
 	if len(words) <= 1 && !strings.HasSuffix(current, " ") {
 		for name := range m.commands {
 			suggestions = append(suggestions, name)
 		}
 		suggestions = append(suggestions, "help", "exit")
+		return buildCompletionSuggestions(prefix, token, suggestions)
 	} else if len(words) > 0 {
 		cmd := strings.ToLower(words[0])
+		if strings.HasPrefix(token, "-") {
+			return buildCompletionSuggestions(prefix, token, shell.FlagSuggestions(cmd))
+		}
 		switch cmd {
 		case "cal", "kontrol", "favori", "sil", "duzenle":
-			for _, st := range m.stationService.GetAllStations() {
-				suggestions = append(suggestions, st.ID)
-			}
+			return buildStationCompletionSuggestions(prefix, token, m.stationService.GetAllStations())
 		case "ulke":
 			suggestions = append(suggestions, m.stationService.GetCountries()...)
 		case "tur":
 			suggestions = append(suggestions, m.stationService.GetGenres()...)
 		case "tema":
 			suggestions = append(suggestions, ui.GetThemes()...)
+		case "dil", "lang":
+			for code := range services.L.GetLanguages() {
+				suggestions = append(suggestions, code)
+			}
 		}
 	}
-	sort.Strings(suggestions)
-	m.input.SetSuggestions(uniqueStrings(suggestions))
+	return buildCompletionSuggestions(prefix, token, suggestions)
+}
+
+func completionWords(text string) []string {
+	words := strings.Fields(text)
+	if strings.HasSuffix(text, " ") {
+		words = append(words, "")
+	}
+	return words
+}
+
+func completionTokenStart(text string) int {
+	idx := strings.LastIndexFunc(text, unicode.IsSpace)
+	if idx < 0 {
+		return 0
+	}
+	return idx + 1
+}
+
+func buildCompletionSuggestions(prefix, current string, values []string) []string {
+	values = append([]string(nil), values...)
+	sort.Strings(values)
+
+	currentLower := strings.ToLower(current)
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		if strings.HasPrefix(strings.ToLower(value), currentLower) {
+			out = append(out, prefix+value+" ")
+		}
+	}
+	return out
+}
+
+func buildStationCompletionSuggestions(prefix, current string, stations []models.RadioStation) []string {
+	currentNorm := normalizeCompletionText(current)
+	seen := make(map[string]struct{}, len(stations))
+	out := make([]string, 0, len(stations))
+
+	add := func(st models.RadioStation) {
+		if st.ID == "" {
+			return
+		}
+		if _, ok := seen[st.ID]; ok {
+			return
+		}
+		seen[st.ID] = struct{}{}
+		out = append(out, prefix+st.ID+" ")
+	}
+	matchesIDPrefix := func(st models.RadioStation) bool {
+		return strings.HasPrefix(normalizeCompletionText(st.ID), currentNorm)
+	}
+	matchesNamePrefix := func(st models.RadioStation) bool {
+		return strings.HasPrefix(normalizeCompletionText(st.Name), currentNorm)
+	}
+	matchesIDContains := func(st models.RadioStation) bool {
+		return strings.Contains(normalizeCompletionText(st.ID), currentNorm)
+	}
+	matchesNameContains := func(st models.RadioStation) bool {
+		return strings.Contains(normalizeCompletionText(st.Name), currentNorm)
+	}
+
+	if currentNorm == "" {
+		for _, st := range stations {
+			add(st)
+		}
+		return out
+	}
+
+	for _, st := range stations {
+		if matchesIDPrefix(st) {
+			add(st)
+		}
+	}
+	for _, st := range stations {
+		if matchesNamePrefix(st) {
+			add(st)
+		}
+	}
+	for _, st := range stations {
+		if matchesIDContains(st) {
+			add(st)
+		}
+	}
+	for _, st := range stations {
+		if matchesNameContains(st) {
+			add(st)
+		}
+	}
+	return out
+}
+
+func normalizeCompletionText(s string) string {
+	s = strings.ToLower(s)
+	replacer := strings.NewReplacer(
+		"ç", "c",
+		"ğ", "g",
+		"ı", "i",
+		"ö", "o",
+		"ş", "s",
+		"ü", "u",
+	)
+	return replacer.Replace(s)
 }
 
 func (m *Model) recallHistory(delta int) {
@@ -552,61 +735,148 @@ func (m *Model) moveSelection(delta int) {
 }
 
 func (m *Model) resize() {
-	inputWidth := max(20, m.width-6)
+	inputWidth := max(8, m.width-8)
 	m.input.Width = inputWidth
 
-	// Calculate widths exactly like View() does
-	leftWidth := max(30, int(float64(m.width)*0.38))
-	rightWidth := max(36, m.width-leftWidth-2)
-	if leftWidth+rightWidth+2 > m.width {
-		leftWidth = max(24, m.width/3)
-		rightWidth = max(28, m.width-leftWidth-2)
-	}
-
-	// Calculate heights exactly like View() does
-	// header height is 1, input height is 3, footer height is 1
-	bodyHeight := m.height - 5
-	if bodyHeight < 8 {
-		bodyHeight = 8
-	}
-
-	// nowPlaying panel height is 7
-	outputHeight := bodyHeight - 7 - 2
-	if outputHeight < 4 {
-		outputHeight = 4
-	}
-
-	// Update viewport dimensions
-	m.output.Width = max(20, rightWidth-4)
-	m.output.Height = max(2, outputHeight-2)
-
+	layout := m.calculateLayout(1, 3, 1)
+	m.applyLayout(layout)
 	m.refreshOutput()
+}
+
+func (m *Model) calculateLayout(headerHeight, inputHeight, footerHeight int) screenLayout {
+	bodyHeight := m.height - headerHeight - inputHeight - footerHeight
+	if bodyHeight < 1 {
+		bodyHeight = 1
+	}
+
+	layout := screenLayout{bodyHeight: bodyHeight}
+	if m.width >= 72 && bodyHeight >= 8 {
+		gap := 2
+		leftWidth := clamp(int(float64(m.width)*0.36), 24, 42)
+		rightWidth := m.width - leftWidth - gap
+		if rightWidth < 34 {
+			rightWidth = 34
+			leftWidth = m.width - rightWidth - gap
+		}
+		if leftWidth >= 20 && rightWidth >= 30 && leftWidth+rightWidth+gap <= m.width {
+			layout.sideBySide = true
+			layout.leftWidth = leftWidth
+			layout.rightWidth = rightWidth
+			layout.stationHeight = bodyHeight
+			layout.rightHeight = bodyHeight
+		}
+	}
+
+	if !layout.sideBySide {
+		layout.leftWidth = m.width
+		layout.rightWidth = m.width
+		if bodyHeight >= 14 {
+			layout.stationHeight = clamp(bodyHeight/2, 6, 10)
+			layout.rightHeight = bodyHeight - layout.stationHeight - 1
+			if layout.rightHeight < 5 {
+				layout.rightHeight = 5
+				layout.stationHeight = max(0, bodyHeight-layout.rightHeight-1)
+			}
+		} else {
+			layout.stationHeight = 0
+			layout.rightHeight = bodyHeight
+		}
+	}
+
+	if layout.rightHeight < 1 {
+		layout.rightHeight = 1
+	}
+	layout.outputViewportWidth, layout.outputViewportHeight = outputViewportSize(layout.rightWidth, layout.rightHeight)
+	return layout
+}
+
+func (m *Model) applyLayout(layout screenLayout) {
+	inputWidth := max(8, m.width-8)
+	if m.input.Width != inputWidth {
+		m.input.Width = inputWidth
+	}
+	if layout.outputViewportWidth > 0 && m.output.Width != layout.outputViewportWidth {
+		m.output.Width = layout.outputViewportWidth
+		m.refreshOutput()
+	}
+	if layout.outputViewportHeight > 0 && m.output.Height != layout.outputViewportHeight {
+		m.output.Height = layout.outputViewportHeight
+	}
+}
+
+func (m *Model) renderBody(layout screenLayout) string {
+	if layout.bodyHeight <= 0 {
+		return ""
+	}
+
+	if layout.sideBySide {
+		return lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			m.renderStationPanel(layout.leftWidth, layout.stationHeight),
+			"  ",
+			m.renderRightPanel(layout.rightWidth, layout.rightHeight),
+		)
+	}
+
+	parts := make([]string, 0, 3)
+	if layout.stationHeight > 0 {
+		parts = append(parts, m.renderStationPanel(layout.leftWidth, layout.stationHeight))
+		if layout.stationHeight+layout.rightHeight < layout.bodyHeight {
+			parts = append(parts, "")
+		}
+	}
+	parts = append(parts, m.renderRightPanel(layout.rightWidth, layout.rightHeight))
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 func (m *Model) renderHeader() string {
 	station, song, vol, muted, playing, recording, elapsed := m.player.GetStatus()
 	left := titleStyle.Render("RADIO TERMINAL")
-	mode := pillStyle.Render("Bubble Tea")
-	state := mutedStyle.Render(services.L.Get("stopped"))
+	mode := pillStyle.Render("TUI")
+	stateText := services.L.Get("stopped")
+	stateStyle := mutedStyle
 	if playing && station != nil {
-		title := station.Name
+		stateText = station.Name
 		if song != "" {
-			title += " · " + song
+			stateText += " · " + song
 		}
-		state = goodStyle.Render(truncate(title, max(20, m.width-28)))
+		stateStyle = goodStyle
 	}
 	rec := ""
 	if recording {
-		rec = "  " + badStyle.Render("REC")
+		rec = " · REC"
 	}
 	volume := fmt.Sprintf("Ses %d%%", vol)
 	if muted {
 		volume = services.L.Get("muted") + " · " + volume
 	}
-	right := mutedStyle.Render(fmt.Sprintf("%s · %s%s", volume, formatElapsed(elapsed), rec))
-	line := lipgloss.JoinHorizontal(lipgloss.Center, left, " ", mode, "  ", state)
-	padding := max(1, m.width-lipgloss.Width(line)-lipgloss.Width(right))
-	return lipgloss.NewStyle().Width(m.width).Background(p.panel).Render(line + strings.Repeat(" ", padding) + right)
+	rightText := fmt.Sprintf("%s · %s%s", volume, formatElapsed(elapsed), rec)
+
+	if m.width < 34 {
+		plain := "RADIO TERMINAL · " + stateText
+		return lipgloss.NewStyle().Width(m.width).Background(p.panel).Render(fitOutputLine(infoStyle.Render(plain), m.width))
+	}
+
+	prefix := lipgloss.JoinHorizontal(lipgloss.Center, left, " ", mode)
+	rightMax := max(0, min(lipgloss.Width(rightText), m.width/3))
+	right := mutedStyle.Render(truncate(rightText, rightMax))
+	stateMax := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - 3
+	if stateMax < 8 {
+		right = ""
+		stateMax = m.width - lipgloss.Width(prefix) - 2
+	}
+	if stateMax < 1 {
+		return lipgloss.NewStyle().Width(m.width).Background(p.panel).Render(fitOutputLine(prefix, m.width))
+	}
+
+	state := stateStyle.Render(truncate(stateText, stateMax))
+	line := lipgloss.JoinHorizontal(lipgloss.Center, prefix, " ", state)
+	padding := max(0, m.width-lipgloss.Width(line)-lipgloss.Width(right))
+	content := line
+	if right != "" {
+		content += strings.Repeat(" ", padding) + right
+	}
+	return lipgloss.NewStyle().Width(m.width).Background(p.panel).Render(fitOutputLine(content, m.width))
 }
 
 func (m *Model) renderStationPanel(width, height int) string {
@@ -634,7 +904,10 @@ func (m *Model) renderStationPanel(width, height int) string {
 	m.scrollStart = clamp(m.scrollStart, 0, max(0, len(m.stations)-listHeight))
 	start := m.scrollStart
 
-	lines := []string{title, mutedStyle.Render("↑/↓ seç · Enter çal · Ctrl+F favori")}
+	lines := []string{
+		fitOutputLine(title, innerWidth),
+		mutedStyle.Render(truncate("↑/↓ seç · Enter çal · Ctrl+F favori", innerWidth)),
+	}
 	for i := 0; i < listHeight && start+i < len(m.stations); i++ {
 		idx := start + i
 		st := m.stations[idx]
@@ -656,42 +929,66 @@ func (m *Model) renderStationPanel(width, height int) string {
 		lines = append(lines, "")
 	}
 
-	return activePanelStyle.Width(width).Height(height).Render(strings.Join(lines, "\n"))
+	return activePanelStyle.Width(max(1, width-2)).Height(max(1, height-2)).Render(strings.Join(lines, "\n"))
 }
 
 func (m *Model) renderRightPanel(width, height int) string {
-	now := m.renderNowPlaying(width - 4)
-	outputHeight := height - lipgloss.Height(now) - 2
-	if outputHeight < 4 {
-		outputHeight = 4
+	if height <= 0 {
+		return ""
 	}
-	outputBox := panelStyle.Copy().
-		Width(width).
-		Height(outputHeight + 2).
-		BorderForeground(p.border).
-		Render(sectionTitleStyle.Render("Komut Çıktısı") + "\n" + m.output.View())
+
+	nowHeight, outputBoxHeight := rightPanelHeights(height)
+	if nowHeight == 0 {
+		return m.renderCommandOutputBox(width, outputBoxHeight)
+	}
+
+	now := m.renderNowPlaying(width, nowHeight)
+	outputBox := m.renderCommandOutputBox(width, outputBoxHeight)
 	return lipgloss.JoinVertical(lipgloss.Left, now, outputBox)
 }
 
-func (m *Model) renderNowPlaying(width int) string {
+func (m *Model) renderCommandOutputBox(width, height int) string {
+	if height <= 0 {
+		return ""
+	}
+	contentHeight := max(1, height-2)
+	title := sectionTitleStyle.Render("Komut Çıktısı")
+	viewHeight := max(0, contentHeight-1)
+	view := m.output.View()
+	if viewHeight == 0 {
+		view = ""
+	}
+	outputBox := panelStyle.Copy().
+		Width(max(1, width-2)).
+		Height(max(1, height-2)).
+		BorderForeground(p.border).
+		Render(title + "\n" + view)
+	return outputBox
+}
+
+func (m *Model) renderNowPlaying(width, height int) string {
 	station, song, vol, muted, playing, recording, elapsed := m.player.GetStatus()
 	codec, bitrate, sampleRate := m.player.GetCodecInfo()
+	innerWidth := max(1, width-4)
+	innerHeight := max(1, height-2)
 	lines := []string{sectionTitleStyle.Render("Şimdi Çalıyor")}
 	if !playing || station == nil {
-		lines = append(lines, mutedStyle.Render(truncate("Radyo duruyor. Sol listeden istasyon seçip Enter'a basın.", width)))
+		lines = append(lines, mutedStyle.Render(truncate("Radyo duruyor. Sol listeden istasyon seçip Enter'a basın.", innerWidth)))
 	} else {
-		lines = append(lines, goodStyle.Render(truncate(station.Name, width)))
-		if song != "" {
-			lines = append(lines, infoStyle.Render(truncate(song, width)))
+		lines = append(lines, goodStyle.Render(truncate(station.Name, innerWidth)))
+		if song != "" && len(lines) < innerHeight-1 {
+			lines = append(lines, infoStyle.Render(truncate(song, innerWidth)))
 		} else if elapsed < 15 {
 			lines = append(lines, mutedStyle.Render(services.L.Get("waiting_song")))
 		}
-		meta := []string{
-			firstNonEmpty(station.Country, "—"),
-			firstNonEmpty(station.Genre, "—"),
-			firstNonEmpty(joinNonEmpty(" · ", codec, bitrate, sampleRate), "—"),
+		if len(lines) < innerHeight-1 {
+			meta := []string{
+				firstNonEmpty(station.Country, "—"),
+				firstNonEmpty(station.Genre, "—"),
+				firstNonEmpty(joinNonEmpty(" · ", codec, bitrate, sampleRate), "—"),
+			}
+			lines = append(lines, mutedStyle.Render(truncate(strings.Join(meta, "   "), innerWidth)))
 		}
-		lines = append(lines, mutedStyle.Render(truncate(strings.Join(meta, "   "), width)))
 	}
 
 	volume := fmt.Sprintf("Ses %d%%", vol)
@@ -702,20 +999,31 @@ func (m *Model) renderNowPlaying(width int) string {
 	if recording {
 		flags = append(flags, "KAYIT")
 	}
-	lines = append(lines, mutedStyle.Render(strings.Join(flags, "   ")))
+	if len(lines) < innerHeight {
+		lines = append(lines, mutedStyle.Render(truncate(strings.Join(flags, "   "), innerWidth)))
+	}
+	if len(lines) > innerHeight {
+		lines = lines[:innerHeight]
+	}
 
-	return panelStyle.Copy().Width(width + 4).Height(7).BorderForeground(p.amber).Render(strings.Join(lines, "\n"))
+	return panelStyle.Copy().
+		Width(max(1, width-2)).
+		Height(max(1, height-2)).
+		BorderForeground(p.amber).
+		Render(strings.Join(lines, "\n"))
 }
 
 func (m *Model) renderInput() string {
-	status := ""
+	statusText := ""
 	if m.busy {
-		status = mutedStyle.Render(" çalışıyor: " + m.busyCommand)
+		statusText = " çalışıyor: " + m.busyCommand
 	} else if m.message != "" {
-		status = mutedStyle.Render(" " + m.message)
+		statusText = " " + m.message
 	}
-	content := m.input.View() + status
-	return inputStyle.Width(max(20, m.width-2)).Render(content)
+	innerWidth := max(1, m.width-4)
+	status := mutedStyle.Render(truncate(statusText, max(0, innerWidth-lipgloss.Width(m.input.View()))))
+	content := fitOutputLine(m.input.View()+status, innerWidth)
+	return inputStyle.Width(max(1, m.width-2)).Render(content)
 }
 
 func (m *Model) renderFooter() string {
@@ -803,12 +1111,38 @@ func (m *Model) lastListLen() int {
 
 func (m *Model) commandOutputWidth() int {
 	if m.output.Width > 4 {
-		return m.output.Width - 2
+		return m.output.Width
 	}
 	if m.width > 12 {
 		return max(20, m.width/2-8)
 	}
 	return 78
+}
+
+func rightPanelHeights(height int) (int, int) {
+	if height <= 0 {
+		return 0, 0
+	}
+	if height < 9 {
+		return 0, height
+	}
+	nowHeight := 7
+	if height < 12 {
+		nowHeight = 5
+	}
+	outputHeight := height - nowHeight
+	if outputHeight < 4 {
+		outputHeight = 4
+		nowHeight = max(0, height-outputHeight)
+	}
+	return nowHeight, outputHeight
+}
+
+func outputViewportSize(width, rightHeight int) (int, int) {
+	_, outputBoxHeight := rightPanelHeights(rightHeight)
+	innerWidth := max(1, width-4)
+	innerHeight := max(1, outputBoxHeight-2)
+	return innerWidth, max(1, innerHeight-1)
 }
 
 func normalizeCommandOutput(output string, width int) []string {
@@ -900,15 +1234,25 @@ func uniqueStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil
 	}
-	out := values[:0]
-	var last string
-	for i, value := range values {
-		if i == 0 || value != last {
-			out = append(out, value)
-			last = value
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
 		}
+		seen[value] = struct{}{}
+		out = append(out, value)
 	}
 	return out
+}
+
+func indexOfString(values []string, target string) int {
+	for i, value := range values {
+		if value == target {
+			return i
+		}
+	}
+	return 0
 }
 
 func clamp(v, minValue, maxValue int) int {
@@ -926,6 +1270,13 @@ func clamp(v, minValue, maxValue int) int {
 
 func max(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

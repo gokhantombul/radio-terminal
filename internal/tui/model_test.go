@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/fatih/color"
 	"github.com/rodaine/table"
@@ -51,21 +52,220 @@ func TestNormalizeCommandOutputFitsWidth(t *testing.T) {
 	}
 }
 
+func TestTabCompletesCommandName(t *testing.T) {
+	m := testModel(t)
+	m.input.Focus()
+	m.input.SetValue("ca")
+	m.refreshSuggestions()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(*Model)
+
+	if got := m.input.Value(); got != "cal " {
+		t.Fatalf("expected tab to complete command, got %q", got)
+	}
+}
+
+func TestTabCompletesCommandArgument(t *testing.T) {
+	m := testModel(t)
+	m.input.Focus()
+	m.input.SetValue("cal tr")
+	m.refreshSuggestions()
+
+	expected := firstCompletion(t, m.completionSuggestions("cal tr"))
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(*Model)
+
+	if got := m.input.Value(); got != expected {
+		t.Fatalf("expected tab to complete station argument to %q, got %q", expected, got)
+	}
+}
+
+func TestTabCompletesStationByIDSubstring(t *testing.T) {
+	m := testModel(t)
+	m.input.Focus()
+	m.input.SetValue("cal power")
+	m.refreshSuggestions()
+	if got := m.input.MatchedSuggestions(); len(got) != 0 {
+		t.Fatalf("expected textinput prefix suggestions to be empty for substring match, got %v", got)
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(*Model)
+
+	if got := m.input.Value(); got != "cal tr-powerturk " {
+		t.Fatalf("expected substring tab completion to prefer powerturk, got %q", got)
+	}
+}
+
+func TestRepeatedTabCyclesStationSubstringMatches(t *testing.T) {
+	m := testModel(t)
+	m.input.Focus()
+	m.input.SetValue("cal power")
+	m.refreshSuggestions()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(*Model)
+	if got := m.input.Value(); got != "cal tr-powerturk " {
+		t.Fatalf("expected first tab to complete powerturk, got %q", got)
+	}
+
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(*Model)
+	if got := m.input.Value(); got != "cal tr-powerfm " {
+		t.Fatalf("expected second tab to cycle to powerfm, got %q", got)
+	}
+}
+
+func TestTabCompletesStationByNormalizedName(t *testing.T) {
+	m := testModel(t)
+	m.input.Focus()
+	m.input.SetValue("cal doga")
+	m.refreshSuggestions()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(*Model)
+
+	if got := m.input.Value(); got != "cal tr-paldoga " {
+		t.Fatalf("expected normalized name completion, got %q", got)
+	}
+}
+
+func TestTabCompletesFlag(t *testing.T) {
+	m := testModel(t)
+	m.input.Focus()
+	m.input.SetValue("online-ara -")
+	m.refreshSuggestions()
+
+	expected := firstCompletion(t, m.completionSuggestions("online-ara -"))
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = updated.(*Model)
+
+	if got := m.input.Value(); got != expected {
+		t.Fatalf("expected tab to complete flag to %q, got %q", expected, got)
+	}
+}
+
+func TestDownCyclesInputSuggestions(t *testing.T) {
+	m := testModel(t)
+	m.input.Focus()
+	m.input.SetValue("cal tr")
+	m.refreshSuggestions()
+	suggestions := m.input.MatchedSuggestions()
+	if len(suggestions) < 2 {
+		t.Fatalf("expected multiple suggestions, got %v", suggestions)
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = updated.(*Model)
+
+	if got := m.input.Value(); got != "cal tr" {
+		t.Fatalf("expected down to keep input text, got %q", got)
+	}
+	if got := m.input.CurrentSuggestion(); got != suggestions[1] {
+		t.Fatalf("expected down to select %q, got %q", suggestions[1], got)
+	}
+}
+
+func TestUpRecallsHistoryWhenNoSuggestionsMatch(t *testing.T) {
+	m := testModel(t)
+	m.input.Focus()
+	m.commandHist = []string{"listele", "help"}
+	m.input.SetValue("zz")
+	m.refreshSuggestions()
+	if got := m.input.MatchedSuggestions(); len(got) != 0 {
+		t.Fatalf("expected no matched suggestions, got %v", got)
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = updated.(*Model)
+
+	if got := m.input.Value(); got != "help" {
+		t.Fatalf("expected up to recall history when no suggestions match, got %q", got)
+	}
+}
+
+func TestCtrlNCyclesSuggestionsWhileTyping(t *testing.T) {
+	m := testModel(t)
+	m.input.Focus()
+	m.selected = 0
+	m.input.SetValue("cal tr")
+	m.refreshSuggestions()
+	suggestions := m.input.MatchedSuggestions()
+	if len(suggestions) < 2 {
+		t.Fatalf("expected multiple suggestions, got %v", suggestions)
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
+	m = updated.(*Model)
+
+	if got := m.selected; got != 0 {
+		t.Fatalf("expected ctrl+n not to move station selection while typing, got selected index %d", got)
+	}
+	if got := m.input.CurrentSuggestion(); got != suggestions[1] {
+		t.Fatalf("expected ctrl+n to select %q, got %q", suggestions[1], got)
+	}
+}
+
+func TestViewFitsTerminalSizes(t *testing.T) {
+	services.L.SetLanguage("tr")
+	m := testModel(t)
+	m.commandLog = []string{
+		infoStyle.Render("❯ listele"),
+		"  Bu satır özellikle uzun tutuldu; dar terminallerde taşmadan kırpılmalı ve paneller üst üste binmemeli.",
+	}
+	m.refreshOutput()
+	m.busy = true
+	m.busyCommand = "online-ara cok uzun arama metni"
+	m.input.SetValue("li")
+
+	cases := []struct {
+		name   string
+		width  int
+		height int
+	}{
+		{name: "wide", width: 120, height: 32},
+		{name: "standard", width: 80, height: 24},
+		{name: "narrow", width: 64, height: 24},
+		{name: "compact", width: 50, height: 18},
+		{name: "short", width: 40, height: 12},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m.width = tc.width
+			m.height = tc.height
+			m.resize()
+
+			view := m.View()
+			lines := strings.Split(view, "\n")
+			if len(lines) > tc.height {
+				t.Fatalf("view height = %d, want <= %d\n%s", len(lines), tc.height, view)
+			}
+			for i, line := range lines {
+				if got := ansi.StringWidth(line); got > tc.width {
+					t.Fatalf("line %d width = %d, want <= %d\n%q\n%s", i+1, got, tc.width, line, view)
+				}
+			}
+		})
+	}
+}
+
 func TestDebugTable(t *testing.T) {
 	color.NoColor = false
 	var buf strings.Builder
 	tbl := table.New("NO", "ID", "STATION NAME", "COUNTRY", "GENRE", "FAV").WithWriter(&buf)
-	
+
 	red := color.New(color.FgRed)
 	green := color.New(color.FgGreen)
 	yellow := color.New(color.FgYellow)
-	
+
 	tbl.WithHeaderFormatter(func(format string, vals ...interface{}) string {
 		// Replace %s with %s manually if upper casing, or just upper case the formatted string
 		formatted := fmt.Sprintf(format, vals...)
 		return red.Sprint(strings.ToUpper(formatted))
 	})
-	
+
 	tbl.AddRow(
 		yellow.Sprint(31),
 		green.Sprint("tr-paldoga"),
@@ -118,6 +318,14 @@ func testModel(t *testing.T) *Model {
 	m := New(stationSvc, statsSvc, systemSvc, settings, radioBrowser, notifications, audioPlayer)
 	shell.RegisterAllCommands(m, stationSvc, statsSvc, systemSvc, settings, radioBrowser, notifications, audioPlayer)
 	return m
+}
+
+func firstCompletion(t *testing.T, suggestions []string) string {
+	t.Helper()
+	if len(suggestions) == 0 {
+		t.Fatal("expected at least one completion suggestion")
+	}
+	return uniqueStrings(suggestions)[0]
 }
 
 func testConfig(t *testing.T) *config.RadioConfig {

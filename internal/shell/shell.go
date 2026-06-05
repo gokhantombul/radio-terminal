@@ -221,7 +221,7 @@ func (c *radioCompleter) Do(line []rune, pos int) ([][]rune, int) {
 	cmd := strings.ToLower(words[0])
 	current := words[len(words)-1]
 	if strings.HasPrefix(current, "-") {
-		return completionCandidates(current, flagSuggestions(cmd))
+		return completionCandidates(current, FlagSuggestions(cmd))
 	}
 
 	switch cmd {
@@ -237,6 +237,12 @@ func (c *radioCompleter) Do(line []rune, pos int) ([][]rune, int) {
 		return completionCandidates(current, c.shell.stationService.GetGenres())
 	case "tema":
 		return completionCandidates(current, ui.GetThemes())
+	case "dil", "lang":
+		var values []string
+		for code := range services.L.GetLanguages() {
+			values = append(values, code)
+		}
+		return completionCandidates(current, values)
 	}
 
 	return nil, 0
@@ -277,7 +283,7 @@ func completionCandidates(current string, values []string) ([][]rune, int) {
 	return out, offset
 }
 
-func flagSuggestions(cmd string) []string {
+func FlagSuggestions(cmd string) []string {
 	switch cmd {
 	case "ulke", "tur", "cal", "favori", "kontrol", "dil", "lang":
 		return []string{"-i"}
