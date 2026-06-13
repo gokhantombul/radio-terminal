@@ -85,7 +85,7 @@
       "name": "Kral FM",
       "country": "Türkiye",
       "genre": "Türkçe Pop",
-      "url": "https://dygvideo.dygdigital.com/kralfm/playlist.m3u8",
+      "url": "https://dygedge2.radyotvonline.net/kralfm/playlist.m3u8",
       "favorite": false
     },
     {
@@ -93,7 +93,7 @@
       "name": "Kral Pop",
       "country": "Türkiye",
       "genre": "Pop",
-      "url": "https://dygvideo.dygdigital.com/kralpop/playlist.m3u8",
+      "url": "https://dygedge2.radyotvonline.net/kralpop/playlist.m3u8",
       "favorite": false
     },
     {
@@ -157,7 +157,7 @@
       "name": "NTV Radyo",
       "country": "Türkiye",
       "genre": "Haber/Kültür",
-      "url": "https://dygvideo.dygdigital.com/ntvradyo/playlist.m3u8",
+      "url": "https://dygedge2.radyotvonline.net/ntvradyo/playlist.m3u8",
       "favorite": false
     },
     {
@@ -677,7 +677,7 @@
       "name": "Virgin Radio UK",
       "country": "İngiltere",
       "genre": "Rock/Indie",
-      "url": "https://radio.virginradio.co.uk/stream",
+      "url": "https://virgin.live.stream.broadcasting.news/stream",
       "favorite": false
     },
     {
