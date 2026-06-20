@@ -93,7 +93,7 @@
       "name": "Kral Pop",
       "country": "Türkiye",
       "genre": "Pop",
-      "url": "https://dygedge2.radyotvonline.net/kralpop/playlist.m3u8",
+      "url": "https://ssldyg.radyotvonline.com/smil/smil:kralpop.smil/playlist.m3u",
       "favorite": false
     },
     {
@@ -157,7 +157,7 @@
       "name": "NTV Radyo",
       "country": "Türkiye",
       "genre": "Haber/Kültür",
-      "url": "https://dygedge2.radyotvonline.net/ntvradyo/playlist.m3u8",
+      "url": "http://ntvrdwmp.radyotvonline.com/",
       "favorite": false
     },
     {
@@ -229,7 +229,7 @@
       "name": "Habertürk Radyo",
       "country": "Türkiye",
       "genre": "Haber/Talk",
-      "url": "https://moondigitaledge.radyotvonline.net/haberturkradyo/playlist.m3u8",
+      "url": "https://haberturkradyo.radyotvonline.net/haberturkradyo",
       "favorite": false
     },
     {
@@ -389,7 +389,7 @@
       "name": "BBC Radio 1",
       "country": "İngiltere",
       "genre": "Pop/Rock",
-      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_one",
+      "url": "http://a.files.bbci.co.uk/ms6/live/3441A116-B12E-4D2F-ACA8-C1984642FA4B/audio/simulcast/hls/nonuk/pc_hd_abr_v2/cf/bbc_radio_one.m3u8",
       "favorite": false
     },
     {
@@ -397,7 +397,7 @@
       "name": "BBC Radio 2",
       "country": "İngiltere",
       "genre": "Adult Contemporary",
-      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_two",
+      "url": "http://a.files.bbci.co.uk/ms6/live/3441A116-B12E-4D2F-ACA8-C1984642FA4B/audio/simulcast/hls/nonuk/pc_hd_abr_v2/cf/bbc_radio_two.m3u8",
       "favorite": false
     },
     {
@@ -405,7 +405,7 @@
       "name": "BBC Radio 3",
       "country": "İngiltere",
       "genre": "Classical",
-      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_three",
+      "url": "http://as-hls-ww-live.akamaized.net/pool_23461179/live/ww/bbc_radio_three/bbc_radio_three.isml/bbc_radio_three-audio=320000.norewind.m3u8",
       "favorite": false
     },
     {
@@ -413,7 +413,7 @@
       "name": "BBC Radio 4",
       "country": "İngiltere",
       "genre": "Talk/News",
-      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_fourfm",
+      "url": "http://as-hls-ww-live.akamaized.net/pool_55057080/live/ww/bbc_radio_fourfm/bbc_radio_fourfm.isml/bbc_radio_fourfm-audio=320000.norewind.m3u8",
       "favorite": false
     },
     {
@@ -421,7 +421,7 @@
       "name": "BBC 6 Music",
       "country": "İngiltere",
       "genre": "Alternative",
-      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_6music",
+      "url": "http://as-hls-ww-live.akamaized.net/pool_81827798/live/ww/bbc_6music/bbc_6music.isml/bbc_6music-audio=320000.norewind.m3u8",
       "favorite": false
     },
     {
@@ -429,7 +429,7 @@
       "name": "BBC 1Xtra",
       "country": "İngiltere",
       "genre": "Hip Hop/R&B",
-      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_1xtra",
+      "url": "http://as-hls-ww-live.akamaized.net/pool_92079267/live/ww/bbc_1xtra/bbc_1xtra.isml/bbc_1xtra-audio%3d128000.norewind.m3u8",
       "favorite": false
     },
     {
@@ -693,7 +693,7 @@
       "name": "Radio Caroline",
       "country": "İngiltere",
       "genre": "Rock/Indie",
-      "url": "http://sc3.radiocaroline.net:8030/listen.m3u",
+      "url": "http://sc6.radiocaroline.net:8040/;",
       "favorite": false
     },
     {
@@ -725,7 +725,7 @@
       "name": "BBC World Service",
       "country": "World",
       "genre": "News/Talk",
-      "url": "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service",
+      "url": "http://a.files.bbci.co.uk/ms6/live/3441A116-B12E-4D2F-ACA8-C1984642FA4B/audio/simulcast/hls/nonuk/pc_hd_abr_v2/cf/bbc_world_service.m3u8",
       "favorite": false
     }
   ]
