@@ -1,37 +1,47 @@
 $ErrorActionPreference = 'Stop'
 
 $projectDir = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$binaryName = 'radio.exe'
 $userBin = Join-Path $HOME 'bin'
-$cmdPath = Join-Path $userBin 'radio.cmd'
+$destPath = Join-Path $userBin $binaryName
 
+# Go kontrolü
+if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
+    Write-Error "Hata: 'go' bulunamadi. Lutfen Go'yu yukleyin: https://go.dev/dl/"
+    exit 1
+}
+
+# ffplay kontrolü
+if (-not (Get-Command ffplay -ErrorAction SilentlyContinue)) {
+    Write-Warning "Uyari: 'ffplay' bulunamadi. Oynatma icin ffmpeg gereklidir."
+}
+
+Write-Host "Binary derleniyor..."
+Push-Location $projectDir
+try {
+    go build -o $binaryName ./cmd/radio
+} finally {
+    Pop-Location
+}
+$builtBinary = Join-Path $projectDir $binaryName
+Write-Host "✅ Derleme tamamlandi: $builtBinary"
+
+# Kurulum dizinini oluştur ve kopyala
 New-Item -ItemType Directory -Force -Path $userBin | Out-Null
+Copy-Item -Path $builtBinary -Destination $destPath -Force
+Write-Host "✅ Komut kuruldu: $destPath"
 
-$cmdContent = @"
-@echo off
-setlocal
-set "PROJECT_DIR=$projectDir"
+# PATH kontrolü ve otomatik ekleme
+$userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+$pathParts = $userPath -split ';' | Where-Object { $_ -ne '' }
+if ($pathParts -notcontains $userBin) {
+    $newPath = ($pathParts + $userBin) -join ';'
+    [Environment]::SetEnvironmentVariable('PATH', $newPath, 'User')
+    Write-Host "✅ PATH'e eklendi: $userBin"
+    Write-Host "Degisikligin gecerli olması icin yeni bir terminal acin."
+} else {
+    Write-Host "PATH zaten ayarli: $userBin"
+}
 
-cd /d "%PROJECT_DIR%"
-
-if not exist "venv" (
-  echo Python sanal ortami (venv) bulunamadi. Proje klasorunde su komutu calistirin:
-  echo   python -m venv venv
-  echo   .\venv\Scripts\pip install -r requirements.txt
-  exit /b 1
-)
-
-where ffplay >nul 2>nul
-if errorlevel 1 (
-  echo ffplay bulunamadi. Lutfen ffmpeg yukleyin ve PATH'e ekleyin.
-  exit /b 1
-)
-
-set "PYTHONPATH=%PROJECT_DIR%"
-.\venv\Scripts\python.exe -m src.radio.main
-"@
-
-Set-Content -Path $cmdPath -Value $cmdContent -Encoding ascii
-
-Write-Host "✅ Komut olusturuldu: $cmdPath"
-Write-Host "PATH'e su klasoru ekleyin (Windows Environment Variables): $userBin"
-Write-Host "Sonrasinda terminalde dogrudan 'radio' calisacaktir."
+Write-Host ""
+Write-Host "Kurulum tamamlandi. Yeni terminalde 'radio' komutuyla calistirabilisiniz."
