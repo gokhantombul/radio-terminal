@@ -46,7 +46,8 @@ Main layers:
    system stats, localization, and RadioBrowser API search.
 5. **Player (`internal/player`)** - manages `ffplay` playback, scrapes ICY
    metadata and stream info from stderr, restarts failed playback up to three
-   times, and records active streams with `ffmpeg`.
+   times, records active streams with `ffmpeg`, and keeps an in-memory song
+   history (max 50 entries) accessible via `GetSongHistory()`.
 6. **Web (`internal/web`)** - Gin API plus embedded static files from
    `internal/web/static`. Uses the same player, settings, station, and system
    services as the TUI.
@@ -67,8 +68,8 @@ standard or external infrastructure packages.
   `gecmis`
 - Recording: `kaydet`, `kayitdur`
 - Management: `favori`, `favoriler`, `tema`, `kontrol`, `ekle`, `duzenle`,
-  `sil`, `iceaktar`, `bildirim`, `online-ekle`, `dil`, `lang`, `istatistik`,
-  `sistem`, `web`, `temizle`, `clear`
+  `sil`, `iceaktar`, `disaaktar`, `bildirim`, `online-ekle`, `dil`, `lang`,
+  `istatistik`, `sistem`, `web`, `temizle`, `clear`
 - General commands handled by shells: `help`, `?`, `exit`, `q`, `quit`
 
 Command arguments are parsed with Go `flag.FlagSet` using `flag.ContinueOnError`
@@ -104,5 +105,10 @@ Built-in stations are embedded from `internal/services/stations.json`.
 - Do not rename web JSON keys casually; `SystemService.GetWebInfo` still emits
   `python_version` for web compatibility even though the value is the Go
   runtime version.
-- Existing `scripts/install-command.sh` and `scripts/install-command.ps1`
-  reference old launchers. Update the scripts before documenting or using them.
+- `StatisticsService.Reset()` clears all stats and deletes `stats.json`.
+- Song history is stored in `AudioPlayer.songHistory`; `gecmis` command and
+  `GET /api/history` endpoint both call `player.GetSongHistory()`.
+- Desktop notifications: Linux uses `notify-send`, macOS uses `osascript`,
+  Windows uses PowerShell WinRT Toast (`ToastNotificationManager`).
+- `scripts/install-command.sh` (macOS/Linux) and `scripts/install-command.ps1`
+  (Windows) build the Go binary and install it to the user PATH.

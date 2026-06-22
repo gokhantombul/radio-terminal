@@ -33,7 +33,11 @@ type AudioPlayer struct {
 	mu                  sync.RWMutex
 	stopChan            chan struct{}
 	onSongChange        func(string)
+	songHistory         []string
+	historyMu           sync.RWMutex
 }
+
+const maxSongHistory = 50
 
 func NewAudioPlayer(cfg *config.RadioConfig, ns *services.NotificationService) *AudioPlayer {
 	return &AudioPlayer{
@@ -220,6 +224,13 @@ func (p *AudioPlayer) monitorOutput(stderr interface{}) {
 					}
 					p.mu.Unlock()
 
+					p.historyMu.Lock()
+					p.songHistory = append(p.songHistory, title)
+					if len(p.songHistory) > maxSongHistory {
+						p.songHistory = p.songHistory[len(p.songHistory)-maxSongHistory:]
+					}
+					p.historyMu.Unlock()
+
 					p.notificationService.Notify(stationName, title)
 					if p.onSongChange != nil {
 						p.onSongChange(title)
@@ -347,4 +358,12 @@ func (p *AudioPlayer) SetOnSongChange(f func(string)) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.onSongChange = f
+}
+
+func (p *AudioPlayer) GetSongHistory() []string {
+	p.historyMu.RLock()
+	defer p.historyMu.RUnlock()
+	result := make([]string, len(p.songHistory))
+	copy(result, p.songHistory)
+	return result
 }

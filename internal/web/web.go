@@ -68,6 +68,7 @@ func (ws *WebServer) router() *gin.Engine {
 		api.POST("/favorite/:station_id", ws.toggleFavorite)
 		api.POST("/record/start", ws.startRecording)
 		api.POST("/record/stop", ws.stopRecording)
+		api.GET("/history", ws.getSongHistory)
 		api.GET("/system", ws.getSystemInfo)
 		api.GET("/language", ws.getLanguage)
 		api.POST("/language/:lang_code", ws.setLanguage)
@@ -212,6 +213,15 @@ func (ws *WebServer) stopRecording(c *gin.Context) {
 		"status":  "success",
 		"message": services.L.Get("msg_recording_stopped", map[string]interface{}{"path": path}),
 	})
+}
+
+func (ws *WebServer) getSongHistory(c *gin.Context) {
+	history := ws.player.GetSongHistory()
+	// Return newest first
+	for i, j := 0, len(history)-1; i < j; i, j = i+1, j-1 {
+		history[i], history[j] = history[j], history[i]
+	}
+	c.JSON(http.StatusOK, gin.H{"history": history})
 }
 
 func (ws *WebServer) getSystemInfo(c *gin.Context) {

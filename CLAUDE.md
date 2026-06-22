@@ -43,7 +43,8 @@ Layers:
    settings, statistics, RadioBrowser, notifications, system metrics, and
    localization.
 5. **Player (`internal/player`)** - `ffplay` subprocess management, ICY metadata
-   parsing, stream info parsing, watchdog restarts, and `ffmpeg` recording.
+   parsing, stream info parsing, watchdog restarts, `ffmpeg` recording, and
+   in-memory song history (`songHistory []string`, max 50 entries).
 6. **Web (`internal/web`)** - Gin router and embedded static assets under
    `internal/web/static`.
 7. **UI (`internal/ui`)** - terminal output helpers and themes.
@@ -63,8 +64,8 @@ Registered command names:
   `gecmis`
 - Recording: `kaydet`, `kayitdur`
 - Management: `favori`, `favoriler`, `tema`, `kontrol`, `ekle`, `duzenle`,
-  `sil`, `iceaktar`, `bildirim`, `online-ekle`, `dil`, `lang`, `istatistik`,
-  `sistem`, `web`, `temizle`, `clear`
+  `sil`, `iceaktar`, `disaaktar`, `bildirim`, `online-ekle`, `dil`, `lang`,
+  `istatistik`, `sistem`, `web`, `temizle`, `clear`
 - General shell commands: `help`, `?`, `exit`, `q`, `quit`
 
 Argument parsing uses `flag.FlagSet` with `flag.ContinueOnError`; flag output is
@@ -98,7 +99,12 @@ embedded from `internal/services/stations.json`.
   TUI command capture keeps working.
 - Services should not import TUI or terminal UI packages.
 - Statistics record sessions only when playback duration is at least 30 seconds.
+  `StatisticsService.Reset()` clears all stats and removes `stats.json`.
+- Song history lives in `AudioPlayer.songHistory`; both the `gecmis` TUI command
+  and the `/api/history` web endpoint read from `player.GetSongHistory()`.
 - Web system info keeps the JSON key `python_version` for compatibility while
   returning the Go runtime version.
-- `scripts/install-command.sh` and `scripts/install-command.ps1` still reference
-  legacy launchers. Fix them before relying on them.
+- Desktop notifications: Linux uses `notify-send`, macOS uses `osascript`,
+  Windows uses PowerShell WinRT Toast (`ToastNotificationManager`).
+- `scripts/install-command.sh` (macOS/Linux) and `scripts/install-command.ps1`
+  (Windows) build the Go binary and install it to the user PATH.

@@ -189,6 +189,7 @@ var (
 			"web_favorite_added":           "Added to favorites",
 			"web_favorite_removed":         "Removed from favorites",
 			"web_recording_updated":        "Recording updated.",
+			"cmd_disaaktar_desc":           "Export favorites or all stations as M3U playlist",
 		},
 		"tr": {
 			"app_title":                    "Terminal FM Radyo Çalar - Türkiye & Dünya",
@@ -358,6 +359,7 @@ var (
 			"web_favorite_added":           "Favorilere eklendi",
 			"web_favorite_removed":         "Favorilerden çıkarıldı",
 			"web_recording_updated":        "Kayıt güncellendi.",
+			"cmd_disaaktar_desc":           "Favorileri veya tüm istasyonları M3U olarak dışa aktarır",
 		},
 	}
 

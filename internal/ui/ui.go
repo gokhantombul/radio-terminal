@@ -81,6 +81,34 @@ var Themes = map[string]Theme{
 		Success:   color.New(color.FgHiGreen),
 		Error:     color.New(color.FgHiRed, color.Bold),
 	},
+	"neon-live": {
+		Primary:   color.New(color.FgHiCyan, color.Bold),
+		Secondary: color.New(color.FgHiMagenta),
+		Highlight: color.New(color.FgHiMagenta, color.Bold),
+		Success:   color.New(color.FgHiCyan),
+		Error:     color.New(color.FgHiRed, color.Bold),
+	},
+	"retro-crt": {
+		Primary:   color.New(color.FgHiGreen, color.Bold),
+		Secondary: color.New(color.FgGreen),
+		Highlight: color.New(color.FgHiYellow, color.Bold),
+		Success:   color.New(color.FgHiGreen),
+		Error:     color.New(color.FgHiRed),
+	},
+	"brutalist": {
+		Primary:   color.New(color.FgHiWhite, color.Bold),
+		Secondary: color.New(color.FgWhite),
+		Highlight: color.New(color.FgHiRed, color.Bold),
+		Success:   color.New(color.FgHiGreen),
+		Error:     color.New(color.FgHiRed, color.Bold),
+	},
+	"compact-dashboard": {
+		Primary:   color.New(color.FgHiBlue, color.Bold),
+		Secondary: color.New(color.FgBlue),
+		Highlight: color.New(color.FgHiWhite, color.Bold),
+		Success:   color.New(color.FgHiGreen),
+		Error:     color.New(color.FgHiRed),
+	},
 }
 
 var (

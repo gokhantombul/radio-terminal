@@ -63,9 +63,12 @@ type Model struct {
 	loadingName    string
 	loadingStarted time.Time
 	loadingUntil   time.Time
+	eqFrame        int
+	showHelp       bool
 }
 
 type tickMsg time.Time
+type fastTickMsg time.Time
 
 type commandResultMsg struct {
 	line   string
@@ -259,7 +262,7 @@ func (m *Model) GetLastList() []models.RadioStation {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.input.Focus(), tick())
+	return tea.Batch(m.input.Focus(), tick(), fastTick())
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -276,6 +279,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshStations()
 		m.refreshSuggestions()
 		return m, tick()
+	case fastTickMsg:
+		m.eqFrame++
+		return m, fastTick()
 	case commandResultMsg:
 		m.busy = false
 		m.busyCommand = ""
@@ -286,6 +292,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "esc":
+			if m.showHelp {
+				m.showHelp = false
+				return m, nil
+			}
+			if strings.HasPrefix(m.input.Value(), "/") {
+				m.input.SetValue("")
+				m.refreshStations()
+				return m, nil
+			}
 			return m, tea.Quit
 		case "tab":
 			if m.completeInput() {
@@ -295,6 +310,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			line := strings.TrimSpace(m.input.Value())
 			if line == "" {
+				return m, m.playSelectedCommand()
+			}
+			if strings.HasPrefix(line, "/") {
+				m.input.SetValue("")
+				m.historyCursor = -1
 				return m, m.playSelectedCommand()
 			}
 			m.input.SetValue("")
@@ -355,6 +375,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.moveSelection(-1)
 			return m, nil
+		case "ctrl+h":
+			m.showHelp = !m.showHelp
+			return m, nil
+		case "ctrl+w":
+			return m.handleCommandLine("web")
+		}
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+			layout := m.calculateLayout(1, 3, 1)
+			inStationPanel := layout.stationHeight > 0 &&
+				(!layout.sideBySide || msg.X < layout.leftWidth)
+			if inStationPanel {
+				// Station rows: header(1) + border(1) + title(1) + hint(1) = offset 4
+				const stationRowOffset = 4
+				innerH := max(4, layout.stationHeight-2)
+				listH := innerH - 2
+				row := msg.Y - stationRowOffset
+				if row >= 0 && row < listH {
+					if idx := m.scrollStart + row; idx < len(m.stations) {
+						m.selected = idx
+						return m, m.playSelectedCommand()
+					}
+				}
+			}
 		}
 	}
 
@@ -367,6 +411,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.output = vp
 	cmds = append(cmds, cmd)
 
+	m.refreshStations()
 	m.refreshSuggestions()
 	return m, tea.Batch(cmds...)
 }
@@ -420,6 +465,10 @@ func (m *Model) View() string {
 		return "Radio Terminal başlatılıyor..."
 	}
 
+	if m.showHelp {
+		return m.renderHelpOverlay()
+	}
+
 	header := m.renderHeader()
 	input := m.renderInput()
 	footer := m.renderFooter()
@@ -443,7 +492,7 @@ func (m *Model) handleCommandLine(line string) (tea.Model, tea.Cmd) {
 	case "exit", "q", "quit":
 		return m, tea.Quit
 	case "help", "?":
-		m.appendCommandOutput(line, m.helpText(), nil)
+		m.showHelp = true
 		return m, nil
 	case "clear", "temizle":
 		m.commandLog = nil
@@ -546,6 +595,7 @@ func (m *Model) refreshStations() {
 	lastList := append([]models.RadioStation(nil), m.lastList...)
 	m.mu.RUnlock()
 
+	base := stations
 	if len(lastList) > 0 {
 		known := make(map[string]models.RadioStation, len(stations))
 		for _, st := range stations {
@@ -558,14 +608,16 @@ func (m *Model) refreshStations() {
 			}
 		}
 		if len(filtered) > 0 {
-			m.stations = filtered
-			m.selected = clamp(m.selected, 0, len(m.stations)-1)
-			return
+			base = filtered
 		}
 	}
 
-	m.stations = stations
-	m.selected = clamp(m.selected, 0, len(m.stations)-1)
+	if query := m.searchQuery(); query != "" {
+		m.stations = filterStationsByQuery(base, query)
+	} else {
+		m.stations = base
+	}
+	m.selected = clamp(m.selected, 0, max(0, len(m.stations)-1))
 }
 
 func (m *Model) refreshSuggestions() {
@@ -878,7 +930,15 @@ func (m *Model) renderHeader() string {
 		return lipgloss.NewStyle().Width(m.width).Background(p.panel).Render(fitOutputLine(prefix, m.width))
 	}
 
-	state := stateStyle.Render(truncate(stateText, stateMax))
+	var state string
+	if playing && station != nil && stateMax > 8 {
+		eq := infoStyle.Render(renderEqualizer(m.eqFrame))
+		eqW := lipgloss.Width(eq) + 1
+		state = lipgloss.JoinHorizontal(lipgloss.Center,
+			eq, " ", stateStyle.Render(truncate(stateText, max(0, stateMax-eqW))))
+	} else {
+		state = stateStyle.Render(truncate(stateText, stateMax))
+	}
 	line := lipgloss.JoinHorizontal(lipgloss.Center, prefix, " ", state)
 	padding := max(0, m.width-lipgloss.Width(line)-lipgloss.Width(right))
 	content := line
@@ -894,7 +954,15 @@ func (m *Model) renderStationPanel(width, height int) string {
 	title := sectionTitleStyle.Render("İstasyonlar")
 	loadingID, _, loading := m.stationLoading()
 	lastListLen := m.lastListLen()
-	if lastListLen > 0 {
+	searchQ := m.searchQuery()
+	inSearch := strings.HasPrefix(m.input.Value(), "/")
+	if inSearch {
+		if searchQ != "" {
+			title += " " + infoStyle.Render(fmt.Sprintf("/ %s (%d)", searchQ, len(m.stations)))
+		} else {
+			title += " " + infoStyle.Render("/ ...")
+		}
+	} else if lastListLen > 0 {
 		title += " " + mutedStyle.Render(fmt.Sprintf("(%d filtreli)", len(m.stations)))
 	} else {
 		title += " " + mutedStyle.Render(fmt.Sprintf("(%d)", len(m.stations)))
@@ -914,9 +982,13 @@ func (m *Model) renderStationPanel(width, height int) string {
 	m.scrollStart = clamp(m.scrollStart, 0, max(0, len(m.stations)-listHeight))
 	start := m.scrollStart
 
+	hintText := "↑/↓ seç · Enter çal · Ctrl+F favori"
+	if inSearch {
+		hintText = "/ arama · Enter çal · Esc temizle"
+	}
 	lines := []string{
 		fitOutputLine(title, innerWidth),
-		mutedStyle.Render(truncate("↑/↓ seç · Enter çal · Ctrl+F favori", innerWidth)),
+		mutedStyle.Render(truncate(hintText, innerWidth)),
 	}
 	for i := 0; i < listHeight && start+i < len(m.stations); i++ {
 		idx := start + i
@@ -986,21 +1058,14 @@ func (m *Model) renderCommandOutputBox(width, height int) string {
 	return outputBox
 }
 
+var spinnerChars = [10]string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 func (m *Model) renderCommandLoadingBar(width int) string {
 	if _, loadingName, loading := m.stationLoading(); !loading {
 		return ""
 	} else {
-		barWidth := clamp(width/4, 10, 18)
-		progress := m.loadingProgress(time.Now())
-		filled := int(progress * float64(barWidth))
-		if filled < 1 {
-			filled = 1
-		}
-		if filled > barWidth {
-			filled = barWidth
-		}
-		bar := "[" + strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled) + "]"
-		return infoStyle.Render(truncate(fmt.Sprintf("%s Bağlanıyor: %s", bar, loadingName), width))
+		spin := spinnerChars[m.eqFrame%len(spinnerChars)]
+		return infoStyle.Render(truncate(fmt.Sprintf("%s Bağlanıyor: %s", spin, loadingName), width))
 	}
 }
 
@@ -1108,7 +1173,50 @@ func (m *Model) renderFooter() string {
 		status = strings.Join(parts, "  │  ")
 	}
 
-	return footerStyle.Width(m.width).Render(truncate(status, max(1, m.width-2)))
+	var tip string
+	if m.width >= 60 {
+		tips := [6]string{
+			"Ctrl+F: Favori",
+			"Ctrl+N/P: Sonraki/Önceki",
+			"Ctrl+S: Durdur",
+			"/: Canlı arama",
+			"Tab: Tamamla",
+			"Mouse: Tıkla çal",
+		}
+		tip = "  │  " + tips[(m.eqFrame/40)%len(tips)]
+	}
+
+	full := truncate(status+tip, max(1, m.width-2))
+	return footerStyle.Width(m.width).Render(full)
+}
+
+func (m *Model) renderHelpOverlay() string {
+	content := m.helpText()
+	keybindings := []string{
+		"Ctrl+S: Durdur",
+		"Ctrl+L: Temizle",
+		"Ctrl+F: Favori",
+		"Ctrl+N/P: Sonraki/Önceki",
+		"Ctrl+W: Web aç",
+		"/: Canlı arama",
+		"Esc/Ctrl+H: Kapat",
+	}
+	kbLine := mutedStyle.Render("  " + strings.Join(keybindings, "  ·  "))
+	title := sectionTitleStyle.Render("YARDIM — Tüm Komutlar")
+	inner := strings.Join([]string{title, kbLine, "", content}, "\n")
+
+	boxW := max(50, min(m.width-4, 82))
+	boxH := min(m.height-2, strings.Count(inner, "\n")+6)
+
+	box := panelStyle.Copy().
+		Width(boxW - 2).
+		Height(boxH - 2).
+		BorderForeground(p.amber).
+		Render(inner)
+
+	return lipgloss.Place(m.width, m.height,
+		lipgloss.Center, lipgloss.Center, box,
+		lipgloss.WithWhitespaceBackground(p.bg))
 }
 
 func (m *Model) helpText() string {
@@ -1303,6 +1411,51 @@ func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
+}
+
+func fastTick() tea.Cmd {
+	return tea.Tick(250*time.Millisecond, func(t time.Time) tea.Msg {
+		return fastTickMsg(t)
+	})
+}
+
+var (
+	eqWave    = [8]int{1, 3, 6, 8, 7, 5, 3, 1}
+	eqOffsets = [5]int{0, 2, 5, 3, 7}
+	eqChars   = [9]string{" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
+)
+
+func renderEqualizer(frame int) string {
+	var b strings.Builder
+	for _, off := range eqOffsets {
+		b.WriteString(eqChars[eqWave[(frame+off)%8]])
+	}
+	return b.String()
+}
+
+func filterStationsByQuery(stations []models.RadioStation, query string) []models.RadioStation {
+	if query == "" {
+		return stations
+	}
+	q := normalizeCompletionText(query)
+	out := make([]models.RadioStation, 0, len(stations))
+	for _, st := range stations {
+		if strings.Contains(normalizeCompletionText(st.Name), q) ||
+			strings.Contains(normalizeCompletionText(st.Country), q) ||
+			strings.Contains(normalizeCompletionText(st.Genre), q) ||
+			strings.Contains(normalizeCompletionText(st.ID), q) {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
+func (m *Model) searchQuery() string {
+	val := m.input.Value()
+	if strings.HasPrefix(val, "/") {
+		return normalizeCompletionText(strings.TrimSpace(val[1:]))
+	}
+	return ""
 }
 
 func firstWord(s string) string {

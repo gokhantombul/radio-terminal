@@ -364,6 +364,19 @@ func (s *StationService) saveFavorites() {
 	ioutil.WriteFile(s.config.FavoritesFile, data, 0644)
 }
 
+func (s *StationService) ExportM3U(stations []models.RadioStation) string {
+	var sb strings.Builder
+	sb.WriteString("#EXTM3U\n")
+	for _, st := range stations {
+		name := st.Name
+		if st.Country != "" {
+			name += fmt.Sprintf(" (%s)", st.Country)
+		}
+		sb.WriteString(fmt.Sprintf("#EXTINF:-1,%s\n%s\n", name, st.URL))
+	}
+	return sb.String()
+}
+
 func (s *StationService) loadCustomStations() {
 	path := s.config.CustomStationsFile
 	if _, err := os.Stat(path); os.IsNotExist(err) {

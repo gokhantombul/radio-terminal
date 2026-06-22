@@ -16,8 +16,8 @@ Web arayüzü aynı oynatıcı ve servisleri `127.0.0.1:8765` üzerinden kullan�
 | ffmpeg | ffmpeg paketiyle gelir | `kaydet` komutu ile MP3 kayıt için gerekir |
 
 `online-ara` ve `online-ekle` komutları RadioBrowser API'sine internet erişimi
-gerektirir. Linux masaüstü bildirimi için `notify-send`, macOS için
-`osascript` kullanılır.
+gerektirir. Linux masaüstü bildirimi için `notify-send`, macOS için `osascript`,
+Windows için PowerShell WinRT Toast kullanılır.
 
 ## Kurulum ve Çalıştırma
 
@@ -48,6 +48,19 @@ GOCACHE=/tmp/go-build go test ./...
 `~/.radio-shell/settings.json` içine yazar. Desteklenen dil kodları:
 `en`, `tr`, `de`, `fr`, `it`.
 
+## Kurulum Betikleri
+
+```bash
+# macOS / Linux
+bash scripts/install-command.sh
+
+# Windows (PowerShell)
+.\scripts\install-command.ps1
+```
+
+Her iki betik de Go ile derleme yapar, binary'yi `~/.local/bin` (Unix) veya
+`%USERPROFILE%\bin` (Windows) altına kopyalar ve PATH'e ekler.
+
 ## Web Arayüzü
 
 ```bash
@@ -69,10 +82,14 @@ Web arayüzü `http://127.0.0.1:8765` adresinde çalışır. Arka plan süreci
 | `Ctrl+N` / `Ctrl+P` | İstasyon seçimini ileri/geri taşır |
 | `Ctrl+F` | Seçili istasyonu favorilere ekler veya çıkarır |
 | `Ctrl+S` | Oynatmayı durdurur |
+| `Ctrl+H` | Yardım overlay'ini açar veya kapatır |
+| `Ctrl+W` | Web arayüzünü arka planda başlatır |
 | `Ctrl+L` | Komut çıktısını temizler |
 | `Ctrl+R` | İstasyon listesini yeniler |
 | `PgUp` / `PgDown` | Komut çıktısını kaydırır |
-| `Ctrl+C` / `Esc` | Uygulamadan çıkar |
+| `/sorgu` | Sol panelde canlı istasyon araması; `Enter` ile çalar, `Esc` ile temizler |
+| Sol tık | Sol panelde istasyon satırına tıklayarak doğrudan çalar |
+| `Ctrl+C` / `Esc` | Arama modunda arama siler; aksi hâlde uygulamadan çıkar |
 
 ## Komutlar
 
@@ -118,24 +135,30 @@ Web arayüzü `http://127.0.0.1:8765` adresinde çalışır. Arka plan süreci
 |-------|----------|
 | `favori [id]` | Verilen veya çalan istasyonu favorilere ekler/çıkarır |
 | `favoriler` | Favori istasyonları listeler |
-| `tema [ad]` | Temayı gösterir veya değiştirir |
+| `tema [ad]` | Temayı gösterir veya değiştirir; uygulanırken renk önizlemesi gösterir |
 | `kontrol [id]` | Bir istasyonu veya tüm istasyonları HTTP HEAD/GET ile kontrol eder |
 | `ekle --id <id> --isim <ad> --url <url> [--ulke <ülke>] [--tur <tür>]` | Özel istasyon ekler veya aynı ID'yi günceller |
 | `duzenle --id <id> [--isim ...] [--url ...] [--ulke ...] [--tur ...]` | Özel istasyonu düzenler |
 | `sil --id <id>` | Özel istasyonu siler |
 | `iceaktar -d <playlist.m3u> [-u ülke] [-t tür] [-p prefix]` | M3U playlist içindeki HTTP yayınlarını özel istasyonlara ekler |
+| `disaaktar -d <dosya.m3u> [--favori]` | Favorileri veya tüm istasyonları M3U playlist olarak dışa aktarır |
 | `bildirim [ac\|kapat]` | Masaüstü bildirimlerini açar veya kapatır |
 | `online-ekle -n <no>` | Son `online-ara` sonucundan istasyon ekler |
 | `dil -i <kod>` / `lang -i <kod>` | Uygulama dilini değiştirir |
-| `istatistik` | Dinleme istatistiklerini gösterir |
+| `istatistik [-hepsi] [-sifirla]` | Dinleme istatistiklerini gösterir; `-sifirla` tümünü siler |
 | `sistem` | OS, Go sürümü, CPU ve bellek bilgilerini gösterir |
 | `web` | TUI içinden web arayüzünü başlatır |
 | `temizle` / `clear` | Komut çıktısını temizler |
-| `help` / `?` | Yardım menüsünü gösterir |
+| `help` / `?` | Yardım overlay'ini açar |
 | `exit` / `q` / `quit` | Uygulamadan çıkar |
 
-Mevcut terminal temaları: `default`, `hacker`, `ocean`, `sunset`,
-`midnight`, `sakura`, `winamp-classic`, `besiktas`.
+Mevcut TUI temaları: `default`, `hacker`, `ocean`, `sunset`, `midnight`,
+`sakura`, `winamp-classic`, `besiktas`, `neon-live`, `retro-crt`, `brutalist`,
+`compact-dashboard`.
+
+Web arayüzü ayrıca `shell-glass`, `premium-radio`, `compact-dashboard`,
+`neon-live`, `midnight`, `sakura`, `retro-crt`, `brutalist`, `vintage-car-radio`,
+`windows-95`, `winamp-classic`, `besiktas-bjk` temalarını destekler.
 
 ## Proje Yapısı
 
@@ -146,10 +169,11 @@ internal/config/    Varsayılan ffplay ayarları ve dosya yolları
 internal/models/    RadioStation ve UserSettings veri modelleri
 internal/tui/       Bubble Tea tam ekran terminal arayüzü
 internal/shell/     Komut kayıtları, komut işleyicileri ve tamamlayıcılar
-internal/player/    ffplay oynatma, ffmpeg kayıt ve metadata izleme
+internal/player/    ffplay oynatma, ffmpeg kayıt, metadata izleme ve şarkı geçmişi
 internal/services/  İstasyon, ayar, istatistik, bildirim, sistem, RadioBrowser
 internal/ui/        Terminal çıktı yardımcıları ve temalar
 internal/web/       Gin tabanlı web API ve gömülü statik arayüz
+scripts/            macOS/Linux ve Windows kurulum betikleri
 ```
 
 ## Kalıcı Durum
@@ -181,6 +205,8 @@ binary içine gömülür.
   çıktısını bu katmanı yakalayarak sağ panelde gösterir.
 - Kullanıcıya görünen komut adları ve varsayılan metinler Türkçedir; destekli
   çeviriler `internal/services/localization.go` içinde tutulur.
+- Şarkı geçmişi `AudioPlayer.songHistory` alanında tutulur; hem TUI `gecmis`
+  komutu hem de `/api/history` web endpoint'i buradan okur.
 
 ## Lisans
 

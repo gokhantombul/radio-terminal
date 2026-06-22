@@ -117,6 +117,7 @@ func TestAllRegisteredCommandsSmoke(t *testing.T) {
 		"duzenle":     {"--id", "station-yok"},
 		"sil":         {"--id", "station-yok"},
 		"iceaktar":    {"-d", filepath.Join(t.TempDir(), "missing.m3u")},
+		"disaaktar":   {"-d", filepath.Join(t.TempDir(), "export.m3u")},
 		"bildirim":    {"kapat"},
 		"online-ara":  {},
 		"online-ekle": {"-n", "1"},

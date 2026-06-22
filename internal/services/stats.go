@@ -137,6 +137,13 @@ func (s *StatisticsService) Load() {
 	}
 }
 
+func (s *StatisticsService) Reset() {
+	s.mu.Lock()
+	s.stats = make(map[string]StationStat)
+	s.mu.Unlock()
+	_ = os.Remove(s.config.StatsFile)
+}
+
 func (s *StatisticsService) Save() {
 	top := s.GetTopStations(int(^uint(0) >> 1))
 	data, err := json.MarshalIndent(top, "", "  ")

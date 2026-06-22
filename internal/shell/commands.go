@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"os/exec"
 	"radio-shell/internal/models"
 	"radio-shell/internal/player"
@@ -114,6 +115,7 @@ func RegisterAllCommands(sh CommandHost, ss *services.StationService, stats *ser
 	sh.Register("duzenle", c.Duzenle, "cmd_duzenle_desc", "cat_management")
 	sh.Register("sil", c.Sil, "cmd_sil_desc", "cat_management")
 	sh.Register("iceaktar", c.Iceaktar, "cmd_iceaktar_desc", "cat_management")
+	sh.Register("disaaktar", c.Disaaktar, "cmd_disaaktar_desc", "cat_management")
 	sh.Register("bildirim", c.Bildirim, "cmd_bildirim_desc", "cat_management")
 	sh.Register("online-ara", c.OnlineAra, "cmd_online_ara_desc", "cat_listing")
 	sh.Register("online-ekle", c.OnlineEkle, "cmd_online_ekle_desc", "cat_management")
@@ -402,7 +404,25 @@ func (c *Commands) Ara(args []string) {
 }
 
 func (c *Commands) Istatistik(args []string) {
-	top := c.statsService.GetTopStations(10)
+	fs := newFlagSet("istatistik")
+	reset := fs.Bool("sifirla", false, "reset all stats")
+	all := fs.Bool("hepsi", false, "show all stations")
+	if err := fs.Parse(args); err != nil {
+		return
+	}
+
+	if *reset {
+		c.statsService.Reset()
+		ui.PrintSuccess("İstatistikler sıfırlandı.")
+		return
+	}
+
+	limit := 10
+	if *all {
+		limit = int(^uint(0) >> 1)
+	}
+
+	top := c.statsService.GetTopStations(limit)
 	totalTime := c.statsService.GetTotalListenTime()
 	sessions := c.statsService.GetTotalSessions()
 
@@ -418,7 +438,7 @@ func (c *Commands) Istatistik(args []string) {
 
 	ui.PrintHeader(services.L.Get("stats_top_title"))
 	for _, s := range top {
-		ui.Fprintf("  %-30s | %d s | %d sessions\n", s.StationName, s.TotalSeconds, s.SessionCount)
+		ui.Fprintf("  %-30s | %d s | %d oturum\n", s.StationName, s.TotalSeconds, s.SessionCount)
 	}
 }
 
@@ -796,6 +816,12 @@ func (c *Commands) Tema(args []string) {
 	}
 
 	if ui.SetTheme(name) {
+		t := ui.Themes[name]
+		t.Primary.Fprint(ui.Output, "  ██ ")
+		t.Secondary.Fprint(ui.Output, "██ ")
+		t.Highlight.Fprint(ui.Output, "██ ")
+		t.Success.Fprint(ui.Output, "██ ")
+		t.Error.Fprintln(ui.Output, "██")
 		ui.PrintSuccess(fmt.Sprintf("Tema '%s' olarak ayarlandı.", name))
 	} else {
 		ui.PrintError(fmt.Sprintf("Geçersiz tema. Mevcut: %s", strings.Join(ui.GetThemes(), ", ")))
@@ -983,6 +1009,39 @@ func (c *Commands) Iceaktar(args []string) {
 	} else {
 		ui.PrintError(services.L.Get("msg_import_fail"))
 	}
+}
+
+func (c *Commands) Disaaktar(args []string) {
+	fs := newFlagSet("disaaktar")
+	fileFlag := fs.String("d", "", "output file path")
+	favOnly := fs.Bool("favori", false, "export only favorites")
+	if err := fs.Parse(args); err != nil {
+		ui.PrintError("Kullanım: disaaktar -d <dosya.m3u> [--favori]")
+		return
+	}
+
+	filePath := firstNonEmpty(*fileFlag)
+	if filePath == "" && len(fs.Args()) > 0 {
+		filePath = fs.Args()[0]
+	}
+	if filePath == "" {
+		ui.PrintError("Kullanım: disaaktar -d <dosya.m3u> [--favori]")
+		return
+	}
+
+	var stations []models.RadioStation
+	if *favOnly {
+		stations = c.stationService.GetFavorites()
+	} else {
+		stations = c.stationService.GetAllStations()
+	}
+
+	content := c.stationService.ExportM3U(stations)
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		ui.PrintError(fmt.Sprintf("Dışa aktarma hatası: %v", err))
+		return
+	}
+	ui.PrintSuccess(fmt.Sprintf("%d istasyon dışa aktarıldı: %s", len(stations), filePath))
 }
 
 func (c *Commands) Bildirim(args []string) {

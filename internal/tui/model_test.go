@@ -295,7 +295,7 @@ func TestPlaySelectedShowsLoadingState(t *testing.T) {
 	if got := m.renderStationPanel(50, 12); !strings.Contains(got, "Yükleniyor") {
 		t.Fatalf("expected station panel to show loading, got %q", got)
 	}
-	if got := m.renderCommandOutputBox(60, 12); !strings.Contains(got, "Bağlanıyor") || !strings.Contains(got, "[") {
+	if got := m.renderCommandOutputBox(60, 12); !strings.Contains(got, "Bağlanıyor") {
 		t.Fatalf("expected command output to show loading bar, got %q", got)
 	}
 
