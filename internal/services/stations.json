@@ -517,7 +517,7 @@
       "name": "FIP Radio",
       "country": "Fransa",
       "genre": "Eclectic",
-      "url": "https://icecast.radiofrance.fr/fip-midfi.mp3",
+      "url": "https://icecast.radiofrance.fr/fip-hifi.aac?id=radiofrance",
       "favorite": false
     },
     {
@@ -525,7 +525,7 @@
       "name": "France Musique",
       "country": "Fransa",
       "genre": "Classical",
-      "url": "http://icecast.radiofrance.fr/francemusique-hifi.aac",
+      "url": "https://icecast.radiofrance.fr/francemusique-hifi.aac",
       "favorite": false
     },
     {
@@ -597,7 +597,7 @@
       "name": "Swiss Jazz",
       "country": "İsviçre",
       "genre": "Jazz",
-      "url": "http://stream.srg-ssr.ch/m/rsj/mp3_128",
+      "url": "http://stream.srg-ssr.ch/m/rsj/aacp_96",
       "favorite": false
     },
     {
@@ -605,7 +605,7 @@
       "name": "ABC Lounge",
       "country": "Fransa",
       "genre": "Lounge/Chillout",
-      "url": "http://ice.stream.frequence3.net/frequence3-128.mp3",
+      "url": "https://listen.openstream.co/3139/audio",
       "favorite": false
     },
     {
