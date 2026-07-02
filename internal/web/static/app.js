@@ -28,6 +28,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const systemModal = document.getElementById('system-modal');
     const closeModal = document.getElementById('close-modal');
     const systemStats = document.getElementById('system-stats');
+    const historyBtn = document.getElementById('history-btn');
+    const historyModal = document.getElementById('history-modal');
+    const closeHistoryModal = document.getElementById('close-history-modal');
+    const historyList = document.getElementById('history-list');
     const toastRegion = document.getElementById('toast-region');
 
     let allStations = [];
@@ -48,9 +52,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (elapsedTickId) clearInterval(elapsedTickId);
         elapsedTickId = setInterval(() => {
             const secs = elapsedBase + Math.floor((Date.now() - elapsedBaseAt) / 1000);
-            const m = Math.floor(secs / 60);
+            const h = Math.floor(secs / 3600);
+            const m = Math.floor(secs / 60) % 60;
             const s = secs % 60;
-            elapsedPill.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            const mmss = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            elapsedPill.textContent = h > 0 ? `${h}:${mmss}` : mmss;
         }, 1000);
     }
 
@@ -583,13 +589,45 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             systemStats.innerHTML = `
                 <div class="system-stat"><span>OS</span><strong>${data.os}</strong></div>
-                <div class="system-stat"><span>Python</span><strong>${data.python_version}</strong></div>
+                <div class="system-stat"><span>Go</span><strong>${data.python_version}</strong></div>
                 <div class="system-stat"><span>RAM</span><strong>${data.memory_usage_mb} MB</strong></div>
                 <div class="system-stat"><span>CPU</span><strong>${data.cpu_percent}%</strong></div>
             `;
         } catch (error) {
             console.error('System modal error:', error);
             systemStats.innerHTML = `<p style="color:var(--danger);">${t('msg_error', 'Error')}</p>`;
+        }
+    }
+
+    async function showHistoryModal() {
+        try {
+            historyList.innerHTML = '<div class="spinner" style="margin: 0 auto;"></div>';
+            historyModal.classList.remove('hidden');
+            const response = await fetch('/api/history');
+            if (!response.ok) throw new Error('History API error');
+            const data = await response.json();
+            const songs = data.history || [];
+
+            historyList.innerHTML = '';
+            if (songs.length === 0) {
+                const empty = document.createElement('p');
+                empty.className = 'history-empty';
+                empty.textContent = t('web_history_empty', 'No song history yet.');
+                historyList.appendChild(empty);
+                return;
+            }
+
+            const list = document.createElement('ol');
+            list.className = 'history-songs';
+            songs.forEach(song => {
+                const item = document.createElement('li');
+                item.textContent = song;
+                list.appendChild(item);
+            });
+            historyList.appendChild(list);
+        } catch (error) {
+            console.error('History modal error:', error);
+            historyList.innerHTML = `<p style="color:var(--danger);">${t('msg_error', 'Error')}</p>`;
         }
     }
 
@@ -625,8 +663,16 @@ document.addEventListener('DOMContentLoaded', () => {
     systemModal.addEventListener('click', event => {
         if (event.target === systemModal) systemModal.classList.add('hidden');
     });
+    historyBtn.addEventListener('click', showHistoryModal);
+    closeHistoryModal.addEventListener('click', () => historyModal.classList.add('hidden'));
+    historyModal.addEventListener('click', event => {
+        if (event.target === historyModal) historyModal.classList.add('hidden');
+    });
     document.addEventListener('keydown', event => {
-        if (event.key === 'Escape') systemModal.classList.add('hidden');
+        if (event.key === 'Escape') {
+            systemModal.classList.add('hidden');
+            historyModal.classList.add('hidden');
+        }
     });
 
     fetchLocalization();

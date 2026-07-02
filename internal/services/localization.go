@@ -189,6 +189,8 @@ var (
 			"web_favorite_added":           "Added to favorites",
 			"web_favorite_removed":         "Removed from favorites",
 			"web_recording_updated":        "Recording updated.",
+			"web_history":                  "Song History",
+			"web_history_empty":            "No song history yet.",
 			"cmd_disaaktar_desc":           "Export favorites or all stations as M3U playlist",
 		},
 		"tr": {
@@ -359,6 +361,8 @@ var (
 			"web_favorite_added":           "Favorilere eklendi",
 			"web_favorite_removed":         "Favorilerden çıkarıldı",
 			"web_recording_updated":        "Kayıt güncellendi.",
+			"web_history":                  "Şarkı Geçmişi",
+			"web_history_empty":            "Henüz şarkı geçmişi yok.",
 			"cmd_disaaktar_desc":           "Favorileri veya tüm istasyonları M3U olarak dışa aktarır",
 		},
 	}
@@ -380,8 +384,17 @@ func (ls *LocalizationService) GetLanguage() string {
 	return ls.currentLang
 }
 
+// GetLanguages returns only languages that actually have translations;
+// entries in the display-name map without strings would silently fall
+// back to English if offered.
 func (ls *LocalizationService) GetLanguages() map[string]string {
-	return languages
+	available := make(map[string]string, len(stringsMap))
+	for code, name := range languages {
+		if _, ok := stringsMap[code]; ok {
+			available[code] = name
+		}
+	}
+	return available
 }
 
 func (ls *LocalizationService) GetStrings() map[string]string {

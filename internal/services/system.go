@@ -50,10 +50,10 @@ func (s *SystemService) GetMemoryInfo() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"main_process":           mainMem,
-		"children_processes":     childrenList,
-		"total_children_memory":  childrenMem,
-		"total_memory":           mainMem + childrenMem,
+		"main_process":          mainMem,
+		"children_processes":    childrenList,
+		"total_children_memory": childrenMem,
+		"total_memory":          mainMem + childrenMem,
 	}
 }
 
@@ -93,8 +93,8 @@ func (s *SystemService) GetWebInfo() map[string]interface{} {
 	totalMemMB := float64(totalMem) / 1024 / 1024
 
 	return map[string]interface{}{
-		"os":               stats["os"],
-		"python_version":   stats["go_version"], // Keep key for web compat
+		"os":              stats["os"],
+		"python_version":  stats["go_version"], // Keep key for web compat
 		"memory_usage_mb": round(totalMemMB, 2),
 		"cpu_percent":     stats["cpu_percent"],
 	}

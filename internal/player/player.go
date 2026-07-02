@@ -32,7 +32,6 @@ type AudioPlayer struct {
 	bitrate             string
 	mu                  sync.RWMutex
 	stopChan            chan struct{}
-	onSongChange        func(string)
 	songHistory         []string
 	historyMu           sync.RWMutex
 }
@@ -232,9 +231,6 @@ func (p *AudioPlayer) monitorOutput(stderr interface{}) {
 					p.historyMu.Unlock()
 
 					p.notificationService.Notify(stationName, title)
-					if p.onSongChange != nil {
-						p.onSongChange(title)
-					}
 				} else {
 					p.mu.Unlock()
 				}
@@ -352,12 +348,6 @@ func (p *AudioPlayer) GetCodecInfo() (codec, bitrate, sampleRate string) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.codec, p.bitrate, p.sampleRate
-}
-
-func (p *AudioPlayer) SetOnSongChange(f func(string)) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.onSongChange = f
 }
 
 func (p *AudioPlayer) GetSongHistory() []string {

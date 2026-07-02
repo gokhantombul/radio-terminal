@@ -290,12 +290,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshSuggestions()
 		return m, nil
 	case tea.KeyMsg:
+		if m.showHelp {
+			// Swallow keys while the help overlay is open so they don't
+			// leak into the hidden command input.
+			if msg.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+			m.showHelp = false
+			return m, nil
+		}
 		switch msg.String() {
 		case "ctrl+c", "esc":
-			if m.showHelp {
-				m.showHelp = false
-				return m, nil
-			}
 			if strings.HasPrefix(m.input.Value(), "/") {
 				m.input.SetValue("")
 				m.refreshStations()
@@ -1490,6 +1495,9 @@ func joinNonEmpty(sep string, values ...string) string {
 func formatElapsed(seconds int) string {
 	if seconds < 0 {
 		seconds = 0
+	}
+	if seconds >= 3600 {
+		return fmt.Sprintf("%d:%02d:%02d", seconds/3600, (seconds/60)%60, seconds%60)
 	}
 	return fmt.Sprintf("%02d:%02d", seconds/60, seconds%60)
 }

@@ -1137,6 +1137,38 @@ h1 {
     color: var(--text-primary);
 }
 
+.history-list {
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
+}
+
+.history-songs {
+    margin: 0;
+    padding: 0 0 0 1.6em;
+    display: grid;
+    gap: 4px;
+}
+
+.history-songs li {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.history-songs li::marker {
+    color: var(--accent);
+}
+
+.history-songs li:last-child {
+    border-bottom: none;
+}
+
+.history-empty {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
 body[data-theme="premium-radio"] .now-playing {
     min-height: 250px;
     padding: 36px;

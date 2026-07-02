@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"radio-shell/internal/models"
@@ -11,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 	"github.com/rodaine/table"
@@ -183,7 +183,7 @@ func Fprintln(a ...interface{}) {
 func LoadTheme() {
 	home, _ := os.UserHomeDir()
 	themeFile := filepath.Join(home, ".radio-shell", "theme")
-	if data, err := ioutil.ReadFile(themeFile); err == nil {
+	if data, err := os.ReadFile(themeFile); err == nil {
 		name := strings.TrimSpace(string(data))
 		if t, ok := Themes[name]; ok {
 			CurrentTheme = t
@@ -199,7 +199,7 @@ func SetTheme(name string) bool {
 		home, _ := os.UserHomeDir()
 		themeFile := filepath.Join(home, ".radio-shell", "theme")
 		os.MkdirAll(filepath.Dir(themeFile), 0755)
-		ioutil.WriteFile(themeFile, []byte(name), 0644)
+		os.WriteFile(themeFile, []byte(name), 0644)
 		return true
 	}
 	return false
@@ -218,31 +218,42 @@ func IsCurrentTheme(name string) bool {
 	return CurrentThemeName == name
 }
 
+// bannerPadding centers text in width columns using rune count, so UTF-8
+// text (Turkish letters, ♬, ░) keeps the box borders aligned.
+func bannerPadding(text string, width int) (left, right int) {
+	textWidth := utf8.RuneCountInString(text)
+	if textWidth >= width {
+		return 0, 0
+	}
+	left = (width - textWidth) / 2
+	return left, width - left - textWidth
+}
+
 func PrintBanner() {
 	width := 66
 	appTitle := services.L.Get("app_title")
+	version := "v3.0.0 | Go Edition"
 
 	fmt.Fprintln(Output)
 	CurrentTheme.Secondary.Fprintf(Output, "  ╔%s╗\n", strings.Repeat("═", width))
+
+	left, right := bannerPadding("♬  ░░░ RADIO SHELL ░░░  ♬", width)
 	CurrentTheme.Secondary.Fprint(Output, "  ║")
-	fmt.Fprint(Output, "                  ♬  ")
+	fmt.Fprint(Output, strings.Repeat(" ", left), "♬  ")
 	CurrentTheme.Highlight.Fprint(Output, "░░░ RADIO SHELL ░░░")
-	fmt.Fprint(Output, "  ♬                   ")
+	fmt.Fprint(Output, "  ♬", strings.Repeat(" ", right))
 	CurrentTheme.Secondary.Fprintln(Output, "║")
 
+	left, right = bannerPadding(appTitle, width)
 	CurrentTheme.Secondary.Fprint(Output, "  ║")
-	padding := (width - len(appTitle)) / 2
-	fmt.Fprint(Output, strings.Repeat(" ", padding))
+	fmt.Fprint(Output, strings.Repeat(" ", left))
 	CurrentTheme.Primary.Fprint(Output, appTitle)
-	fmt.Fprint(Output, strings.Repeat(" ", width-padding-len(appTitle)))
+	fmt.Fprint(Output, strings.Repeat(" ", right))
 	CurrentTheme.Secondary.Fprintln(Output, "║")
 
+	left, right = bannerPadding(version, width)
 	CurrentTheme.Secondary.Fprint(Output, "  ║")
-	version := "v3.0.0 | Go 1.25 + Fatih Color"
-	paddingVer := (width - len(version)) / 2
-	fmt.Fprint(Output, strings.Repeat(" ", paddingVer))
-	fmt.Fprint(Output, version)
-	fmt.Fprint(Output, strings.Repeat(" ", width-paddingVer-len(version)))
+	fmt.Fprint(Output, strings.Repeat(" ", left), version, strings.Repeat(" ", right))
 	CurrentTheme.Secondary.Fprintln(Output, "║")
 
 	CurrentTheme.Secondary.Fprintf(Output, "  ╚%s╝\n", strings.Repeat("═", width))

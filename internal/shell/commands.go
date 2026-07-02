@@ -37,9 +37,6 @@ type Commands struct {
 	sessionStart   time.Time
 	sessionStation *models.RadioStation
 
-	songMu      sync.Mutex
-	songHistory []string
-
 	sleepMu    sync.Mutex
 	sleepTimer *time.Timer
 
@@ -122,7 +119,6 @@ func RegisterAllCommands(sh CommandHost, ss *services.StationService, stats *ser
 	sh.Register("dil", c.Dil, "cmd_dil_desc", "cat_management")
 	sh.Register("lang", c.Dil, "cmd_dil_desc", "cat_management")
 
-	p.SetOnSongChange(c.recordSong)
 	sh.SetOnExit(c.recordSession)
 	return c
 }
@@ -167,24 +163,6 @@ func (c *Commands) recordSession() {
 
 	if station != nil && !start.IsZero() {
 		c.statsService.RecordSession(*station, time.Since(start))
-	}
-}
-
-func (c *Commands) recordSong(title string) {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return
-	}
-
-	c.songMu.Lock()
-	defer c.songMu.Unlock()
-
-	if len(c.songHistory) > 0 && c.songHistory[len(c.songHistory)-1] == title {
-		return
-	}
-	c.songHistory = append(c.songHistory, title)
-	if len(c.songHistory) > 50 {
-		c.songHistory = c.songHistory[len(c.songHistory)-50:]
 	}
 }
 
@@ -579,9 +557,6 @@ func (c *Commands) Ses(args []string) {
 		return
 	}
 
-	if level < 0 {
-		level = 0
-	}
 	if level > 100 {
 		level = 100
 	}
@@ -737,9 +712,7 @@ func (c *Commands) Uyku(args []string) {
 }
 
 func (c *Commands) Gecmis(args []string) {
-	c.songMu.Lock()
-	history := append([]string(nil), c.songHistory...)
-	c.songMu.Unlock()
+	history := c.player.GetSongHistory()
 
 	if len(history) == 0 {
 		ui.PrintInfo(services.L.Get("msg_no_history"))
