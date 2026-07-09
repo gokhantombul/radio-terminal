@@ -2,6 +2,8 @@ package shell
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"radio-shell/internal/models"
 	"radio-shell/internal/player"
 	"radio-shell/internal/services"
@@ -65,7 +67,7 @@ func (s *InteractiveShell) Run() {
 
 	rl, err := readline.NewEx(&readline.Config{
 		Prompt:          s.getPrompt(),
-		HistoryFile:     "/tmp/radio-shell.history",
+		HistoryFile:     historyFilePath(),
 		AutoComplete:    newRadioCompleter(s),
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
@@ -123,6 +125,24 @@ func (s *InteractiveShell) Run() {
 			ui.PrintError(services.L.Get("unknown_command", map[string]interface{}{"cmd": cmdName}))
 		}
 	}
+}
+
+// historyFilePath keeps readline history under the per-user app dir instead
+// of the shared /tmp, which leaks history and collides between users.
+func historyFilePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(os.TempDir(), "radio-shell.history")
+	}
+	dir := filepath.Join(home, ".radio-shell")
+	_ = os.MkdirAll(dir, 0755)
+	return filepath.Join(dir, "history")
+}
+
+// PostAsyncMessage implements AsyncMessenger for the plain readline shell,
+// where printing directly to the terminal is safe.
+func (s *InteractiveShell) PostAsyncMessage(text string) {
+	ui.PrintInfo(text)
 }
 
 func (s *InteractiveShell) getPrompt() string {

@@ -54,6 +54,22 @@ type CommandHost interface {
 	GetLastList() []models.RadioStation
 }
 
+// AsyncMessenger is implemented by hosts that can safely display messages
+// produced outside of command execution (timers, background goroutines).
+// Background code must use this instead of ui printers: the TUI redirects the
+// global ui output into per-command buffers, so writing to it from another
+// goroutine is a data race.
+type AsyncMessenger interface {
+	PostAsyncMessage(text string)
+}
+
+// postAsync delivers a message from a background goroutine to the host.
+func (c *Commands) postAsync(text string) {
+	if am, ok := c.shell.(AsyncMessenger); ok {
+		am.PostAsyncMessage(text)
+	}
+}
+
 func RegisterAllCommands(sh CommandHost, ss *services.StationService, stats *services.StatisticsService, sys *services.SystemService, set *services.SettingsService, rb *services.RadioBrowserService, ns *services.NotificationService, p *player.AudioPlayer) *Commands {
 	c := &Commands{
 		shell:           sh,
@@ -464,7 +480,7 @@ func (c *Commands) Web(args []string) {
 			c.webMu.Lock()
 			c.webStarted = false
 			c.webMu.Unlock()
-			ui.PrintError(fmt.Sprintf("Web server error: %v", err))
+			c.postAsync(fmt.Sprintf("Web sunucusu hatası: %v", err))
 		}
 	}()
 
@@ -563,7 +579,9 @@ func (c *Commands) Ses(args []string) {
 
 	c.player.SetVolume(level, true)
 	c.settingsService.SetVolume(level)
-	c.settingsService.SetMuted(false)
+	if level > 0 {
+		c.settingsService.SetMuted(false)
+	}
 	ui.PrintSuccess(services.L.Get("msg_vol_set", map[string]interface{}{"vol": level}))
 }
 
@@ -703,8 +721,9 @@ func (c *Commands) Uyku(args []string) {
 		c.sleepMu.Lock()
 		c.sleepTimer = nil
 		c.sleepMu.Unlock()
-		c.Dur(nil)
-		ui.PrintInfo(services.L.Get("msg_sleep_done"))
+		c.recordSession()
+		c.player.Stop()
+		c.postAsync(services.L.Get("msg_sleep_done"))
 	})
 	c.sleepMu.Unlock()
 
@@ -829,9 +848,26 @@ func (c *Commands) Kontrol(args []string) {
 	}
 
 	ui.PrintInfo(services.L.Get("msg_checking", map[string]interface{}{"count": len(stations)}))
+
+	// Check in parallel (bounded); print only after all workers finish so the
+	// output stays inside this command's captured buffer.
+	results := make([]bool, len(stations))
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for i, st := range stations {
+		wg.Add(1)
+		go func(i int, st models.RadioStation) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			results[i] = c.stationActive(st)
+		}(i, st)
+	}
+	wg.Wait()
+
 	success := 0
-	for _, st := range stations {
-		if c.stationActive(st) {
+	for i, st := range stations {
+		if results[i] {
 			success++
 			if stationID != "" {
 				ui.PrintSuccess(fmt.Sprintf("%s: %s", st.Name, services.L.Get("msg_active")))

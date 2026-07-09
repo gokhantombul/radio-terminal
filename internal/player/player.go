@@ -3,6 +3,7 @@ package player
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"radio-shell/internal/models"
 	"radio-shell/internal/services"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +21,9 @@ type AudioPlayer struct {
 	config              *config.RadioConfig
 	notificationService *services.NotificationService
 	process             *exec.Cmd
+	processDone         chan struct{}
 	recordProcess       *exec.Cmd
+	recordDone          chan struct{}
 	currentRecordPath   string
 	currentStation      *models.RadioStation
 	currentSong         string
@@ -31,9 +35,12 @@ type AudioPlayer struct {
 	channels            string
 	bitrate             string
 	mu                  sync.RWMutex
-	stopChan            chan struct{}
-	songHistory         []string
-	historyMu           sync.RWMutex
+	// startMu serializes ffplay start/restart so the watchdog and volume
+	// changes can never spawn two players at once.
+	startMu     sync.Mutex
+	stopChan    chan struct{}
+	songHistory []string
+	historyMu   sync.RWMutex
 }
 
 const maxSongHistory = 50
@@ -46,31 +53,50 @@ func NewAudioPlayer(cfg *config.RadioConfig, ns *services.NotificationService) *
 	}
 }
 
+// processAlive reports whether cmd was started and has not been reaped yet.
+// done is closed by the waiter goroutine once the process exits.
+func processAlive(cmd *exec.Cmd, done chan struct{}) bool {
+	if cmd == nil || cmd.Process == nil || done == nil {
+		return false
+	}
+	select {
+	case <-done:
+		return false
+	default:
+		return true
+	}
+}
+
 func (p *AudioPlayer) Play(station models.RadioStation, initialVolume int, muted bool) {
 	p.Stop()
 
+	stopChan := make(chan struct{})
 	p.mu.Lock()
 	p.currentStation = &station
 	p.volume = initialVolume
 	p.muted = muted
 	p.currentSong = ""
 	p.playbackStartTime = time.Now()
-	p.stopChan = make(chan struct{})
+	p.stopChan = stopChan
 	p.mu.Unlock()
 
 	p.startFFplay()
 
-	go p.watchdogLoop()
+	go p.watchdogLoop(stopChan)
 }
 
 func (p *AudioPlayer) startFFplay() {
+	p.startMu.Lock()
+	defer p.startMu.Unlock()
+
 	p.mu.RLock()
 	station := p.currentStation
-	if station == nil {
-		p.mu.RUnlock()
+	stopChan := p.stopChan
+	alive := processAlive(p.process, p.processDone)
+	p.mu.RUnlock()
+	if station == nil || stopChan == nil || alive {
 		return
 	}
-	p.mu.RUnlock()
 
 	effectiveVol := p.GetEffectiveVolume()
 	args := []string{"-nodisp", "-hide_banner", "-loglevel", "info", "-autoexit", "-volume", fmt.Sprintf("%d", effectiveVol), station.URL}
@@ -85,11 +111,27 @@ func (p *AudioPlayer) startFFplay() {
 		return
 	}
 
-	p.mu.Lock()
-	p.process = cmd
-	p.mu.Unlock()
+	// Single owner of Wait: reap the process when it exits (naturally or
+	// killed) so it never lingers as a zombie and liveness checks stay honest.
+	done := make(chan struct{})
+	go func() {
+		p.monitorOutput(stderr)
+		cmd.Wait()
+		close(done)
+	}()
 
-	go p.monitorOutput(stderr)
+	p.mu.Lock()
+	if p.stopChan != stopChan {
+		// Stop (or a new Play) happened while we were starting; this
+		// process belongs to a dead session.
+		p.mu.Unlock()
+		cmd.Process.Kill()
+		<-done
+		return
+	}
+	p.process = cmd
+	p.processDone = done
+	p.mu.Unlock()
 }
 
 func (p *AudioPlayer) Stop() {
@@ -98,20 +140,10 @@ func (p *AudioPlayer) Stop() {
 		close(p.stopChan)
 		p.stopChan = nil
 	}
-
-	if p.process != nil && p.process.Process != nil {
-		p.process.Process.Signal(os.Interrupt)
-		// Wait or kill
-		done := make(chan error, 1)
-		go func() { done <- p.process.Wait() }()
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-			p.process.Process.Kill()
-		}
-		p.process = nil
-	}
-
+	proc := p.process
+	done := p.processDone
+	p.process = nil
+	p.processDone = nil
 	p.currentStation = nil
 	p.currentSong = ""
 	p.codec = ""
@@ -121,7 +153,30 @@ func (p *AudioPlayer) Stop() {
 	p.playbackStartTime = time.Time{}
 	p.mu.Unlock()
 
+	terminateProcess(proc, done, 2*time.Second)
 	p.StopRecording()
+}
+
+// terminateProcess asks cmd to exit and waits until the waiter goroutine has
+// reaped it, escalating to Kill after timeout. Runs without holding p.mu so
+// status queries stay responsive while we wait.
+func terminateProcess(cmd *exec.Cmd, done chan struct{}, timeout time.Duration) {
+	if !processAlive(cmd, done) {
+		return
+	}
+	if runtime.GOOS == "windows" {
+		// os.Interrupt is not implemented on Windows; kill directly.
+		cmd.Process.Kill()
+		<-done
+		return
+	}
+	cmd.Process.Signal(os.Interrupt)
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		cmd.Process.Kill()
+		<-done
+	}
 }
 
 func (p *AudioPlayer) GetEffectiveVolume() int {
@@ -159,21 +214,28 @@ func (p *AudioPlayer) SetMuted(muted bool) {
 func (p *AudioPlayer) IsPlaying() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.process != nil && p.process.Process != nil && p.process.ProcessState == nil
+	return processAlive(p.process, p.processDone)
 }
 
 func (p *AudioPlayer) restartFFplay() {
+	p.startMu.Lock()
 	p.mu.Lock()
-	if p.process != nil && p.process.Process != nil {
-		p.process.Process.Kill()
-		p.process.Wait()
-		p.process = nil
-	}
+	proc := p.process
+	done := p.processDone
+	p.process = nil
+	p.processDone = nil
 	p.mu.Unlock()
+
+	if processAlive(proc, done) {
+		proc.Process.Kill()
+		<-done
+	}
+	p.startMu.Unlock()
+
 	p.startFFplay()
 }
 
-func (p *AudioPlayer) watchdogLoop() {
+func (p *AudioPlayer) watchdogLoop(stopChan chan struct{}) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
@@ -182,26 +244,29 @@ func (p *AudioPlayer) watchdogLoop() {
 
 	for {
 		select {
-		case <-p.stopChan:
+		case <-stopChan:
 			return
 		case <-ticker.C:
-			if !p.IsPlaying() {
-				if retries < maxRetries {
-					retries++
-					time.Sleep(1 * time.Second)
-					p.startFFplay()
-				} else {
-					return
-				}
+			if p.IsPlaying() {
+				retries = 0
+				continue
 			}
+			if retries >= maxRetries {
+				return
+			}
+			retries++
+			select {
+			case <-stopChan:
+				return
+			case <-time.After(1 * time.Second):
+			}
+			p.startFFplay()
 		}
 	}
 }
 
-func (p *AudioPlayer) monitorOutput(stderr interface{}) {
-	scanner := bufio.NewScanner(stderr.(interface {
-		Read(p []byte) (n int, err error)
-	}))
+func (p *AudioPlayer) monitorOutput(stderr io.Reader) {
+	scanner := bufio.NewScanner(stderr)
 
 	icyPattern := regexp.MustCompile(`StreamTitle\s*:\s*([^;]+)`)
 	audioPattern := regexp.MustCompile(`Stream #.*Audio: ([^,]+), ([^,]+), ([^,]+)`)
@@ -257,17 +322,16 @@ func (p *AudioPlayer) monitorOutput(stderr interface{}) {
 }
 
 func (p *AudioPlayer) StartRecording() (string, error) {
-	if !p.IsPlaying() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if !processAlive(p.process, p.processDone) || p.currentStation == nil {
 		return "", fmt.Errorf("not playing")
 	}
-
-	p.mu.RLock()
-	station := p.currentStation
-	p.mu.RUnlock()
-
-	if p.IsRecording() {
+	if processAlive(p.recordProcess, p.recordDone) {
 		return "", fmt.Errorf("already recording")
 	}
+	station := *p.currentStation
 
 	p.config.EnsureDirs()
 	safeName := ""
@@ -296,36 +360,41 @@ func (p *AudioPlayer) StartRecording() (string, error) {
 		return "", err
 	}
 
-	p.mu.Lock()
+	done := make(chan struct{})
+	go func() {
+		cmd.Wait()
+		close(done)
+	}()
+
 	p.recordProcess = cmd
+	p.recordDone = done
 	p.currentRecordPath = filePath
-	p.mu.Unlock()
 
 	return fileName, nil
 }
 
 func (p *AudioPlayer) StopRecording() string {
-	if !p.IsRecording() {
-		return ""
-	}
-
 	p.mu.Lock()
-	if p.recordProcess != nil && p.recordProcess.Process != nil {
-		p.recordProcess.Process.Signal(os.Interrupt)
-		p.recordProcess.Wait()
-		p.recordProcess = nil
-	}
+	proc := p.recordProcess
+	done := p.recordDone
 	path := p.currentRecordPath
+	p.recordProcess = nil
+	p.recordDone = nil
 	p.currentRecordPath = ""
 	p.mu.Unlock()
 
+	if proc == nil || proc.Process == nil || done == nil {
+		return ""
+	}
+	// SIGINT lets ffmpeg finalize the MP3; give it time before killing.
+	terminateProcess(proc, done, 5*time.Second)
 	return path
 }
 
 func (p *AudioPlayer) IsRecording() bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	return p.recordProcess != nil && p.recordProcess.Process != nil && p.recordProcess.ProcessState == nil
+	return processAlive(p.recordProcess, p.recordDone)
 }
 
 func (p *AudioPlayer) GetStatus() (station *models.RadioStation, song string, vol int, muted bool, playing bool, recording bool, elapsed int) {
@@ -336,8 +405,8 @@ func (p *AudioPlayer) GetStatus() (station *models.RadioStation, song string, vo
 	song = p.currentSong
 	vol = p.volume
 	muted = p.muted
-	playing = p.process != nil && p.process.Process != nil && p.process.ProcessState == nil
-	recording = p.recordProcess != nil && p.recordProcess.Process != nil && p.recordProcess.ProcessState == nil
+	playing = processAlive(p.process, p.processDone)
+	recording = processAlive(p.recordProcess, p.recordDone)
 	if !p.playbackStartTime.IsZero() {
 		elapsed = int(time.Since(p.playbackStartTime).Seconds())
 	}

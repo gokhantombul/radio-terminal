@@ -210,6 +210,7 @@ func (s *StationService) ImportPlaylist(filePath, country, genre, prefix string)
 	lines := strings.Split(string(content), "\n")
 	count := 0
 	name := ""
+	usedIDs := make(map[string]struct{})
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -240,8 +241,19 @@ func (s *StationService) ImportPlaylist(filePath, country, genre, prefix string)
 				}
 			}
 
+			// Same-named entries in one file must not overwrite each other;
+			// deterministic suffixes keep re-imports idempotent.
+			id := safeID
+			for i := 2; ; i++ {
+				if _, taken := usedIDs[id]; !taken {
+					break
+				}
+				id = fmt.Sprintf("%s-%d", safeID, i)
+			}
+			usedIDs[id] = struct{}{}
+
 			st := models.RadioStation{
-				ID:      safeID,
+				ID:      id,
 				Name:    name,
 				Country: country,
 				Genre:   genre,

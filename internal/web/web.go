@@ -4,7 +4,9 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
+	"net/url"
 	"radio-shell/internal/models"
 	"radio-shell/internal/player"
 	"radio-shell/internal/services"
@@ -54,7 +56,7 @@ func (ws *WebServer) Start(host string, port int) error {
 func (ws *WebServer) router() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(gin.Recovery(), localhostGuard())
 
 	// API Routes
 	api := r.Group("/api")
@@ -92,6 +94,42 @@ func (ws *WebServer) router() *gin.Engine {
 	})
 
 	return r
+}
+
+// localhostGuard rejects requests that do not target this machine. The server
+// only listens on 127.0.0.1, but a browser can still be lured into sending
+// requests here from a malicious page: DNS rebinding arrives with a foreign
+// Host header, and cross-site form/fetch POSTs (CSRF) carry a foreign Origin.
+// Non-browser local clients (curl etc.) send no Origin and stay allowed.
+func localhostGuard() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !isLocalHostname(hostWithoutPort(c.Request.Host)) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			if origin := c.GetHeader("Origin"); origin != "" {
+				u, err := url.Parse(origin)
+				if err != nil || !isLocalHostname(u.Hostname()) {
+					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+		c.Next()
+	}
+}
+
+func hostWithoutPort(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return host
+}
+
+func isLocalHostname(host string) bool {
+	host = strings.ToLower(strings.Trim(host, "[]"))
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 func staticFileSystem() http.FileSystem {
@@ -170,7 +208,11 @@ func (ws *WebServer) setVolume(c *gin.Context) {
 
 func (ws *WebServer) setMute(c *gin.Context) {
 	mutedStr := c.Param("muted")
-	muted, _ := strconv.ParseBool(mutedStr)
+	muted, err := strconv.ParseBool(mutedStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid mute value"})
+		return
+	}
 	ws.player.SetMuted(muted)
 	ws.settingsService.SetMuted(muted)
 	status := "unmuted"

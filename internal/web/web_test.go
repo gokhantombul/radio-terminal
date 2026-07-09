@@ -31,6 +31,7 @@ func TestRouterServesAPIAndStaticFiles(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Host = "127.0.0.1:8765"
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 
@@ -41,6 +42,56 @@ func TestRouterServesAPIAndStaticFiles(t *testing.T) {
 				t.Fatalf("expected body to contain %q, got %q", tc.wantBody, rec.Body.String())
 			}
 		})
+	}
+}
+
+func TestLocalhostGuard(t *testing.T) {
+	ws := testWebServer(t)
+	router := ws.router()
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		host       string
+		origin     string
+		wantStatus int
+	}{
+		{name: "local get allowed", method: http.MethodGet, path: "/api/status", host: "localhost:8765", wantStatus: http.StatusOK},
+		{name: "dns rebinding blocked", method: http.MethodGet, path: "/api/status", host: "evil.example.com", wantStatus: http.StatusForbidden},
+		{name: "csrf origin blocked", method: http.MethodPost, path: "/api/stop", host: "127.0.0.1:8765", origin: "https://evil.example.com", wantStatus: http.StatusForbidden},
+		{name: "same origin post allowed", method: http.MethodPost, path: "/api/stop", host: "127.0.0.1:8765", origin: "http://127.0.0.1:8765", wantStatus: http.StatusOK},
+		{name: "no origin post allowed", method: http.MethodPost, path: "/api/stop", host: "127.0.0.1:8765", wantStatus: http.StatusOK},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.Host = tc.host
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%q", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestSetMuteRejectsInvalidValue(t *testing.T) {
+	ws := testWebServer(t)
+	router := ws.router()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/mute/banana", nil)
+	req.Host = "127.0.0.1:8765"
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body=%q", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
 }
 

@@ -32,6 +32,7 @@ type Model struct {
 	commands map[string]shell.ShellCommand
 	onExit   func()
 	exitOnce sync.Once
+	program  *tea.Program
 
 	stationService  *services.StationService
 	statsService    *services.StatisticsService
@@ -74,6 +75,12 @@ type commandResultMsg struct {
 	line   string
 	output string
 	err    error
+}
+
+// asyncLineMsg carries output produced outside of command execution
+// (sleep timer, background web server) into the Bubble Tea loop.
+type asyncLineMsg struct {
+	text string
 }
 
 type screenLayout struct {
@@ -227,8 +234,27 @@ func Run(
 	defer m.fireExit()
 
 	program := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	m.mu.Lock()
+	m.program = program
+	m.mu.Unlock()
 	_, err := program.Run()
 	return err
+}
+
+// PostAsyncMessage implements shell.AsyncMessenger: background goroutines
+// (sleep timer, web server errors) surface messages through the Bubble Tea
+// loop instead of writing to the shared ui output.
+func (m *Model) PostAsyncMessage(text string) {
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	m.mu.RLock()
+	program := m.program
+	m.mu.RUnlock()
+	if program == nil {
+		return
+	}
+	program.Send(asyncLineMsg{text: text})
 }
 
 func (m *Model) Register(name string, f shell.CommandFunc, desc, category string) {
@@ -288,6 +314,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appendCommandOutput(msg.line, msg.output, msg.err)
 		m.refreshStations()
 		m.refreshSuggestions()
+		return m, nil
+	case asyncLineMsg:
+		m.commandLog = append(m.commandLog, infoStyle.Render("  ℹ "+msg.text))
+		if len(m.commandLog) > 300 {
+			m.commandLog = m.commandLog[len(m.commandLog)-300:]
+		}
+		m.refreshOutput()
+		m.refreshStations()
 		return m, nil
 	case tea.KeyMsg:
 		if m.showHelp {
@@ -512,13 +546,19 @@ func (m *Model) handleCommandLine(line string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) runCommand(line string) tea.Cmd {
+	// Capture the width on the Update goroutine; the command itself runs on
+	// another goroutine and must not touch the viewport model.
+	width := m.commandOutputWidth()
 	return func() tea.Msg {
-		output, err := m.executeCommand(line)
+		output, err := m.executeCommand(line, width)
 		return commandResultMsg{line: line, output: output, err: err}
 	}
 }
 
 func (m *Model) playSelectedCommand() tea.Cmd {
+	if m.busy {
+		return nil
+	}
 	if len(m.stations) == 0 {
 		return func() tea.Msg {
 			return commandResultMsg{line: "cal", output: "", err: fmt.Errorf("çalınacak istasyon yok")}
@@ -533,7 +573,7 @@ func (m *Model) playSelectedCommand() tea.Cmd {
 	return m.runCommand(line)
 }
 
-func (m *Model) executeCommand(line string) (string, error) {
+func (m *Model) executeCommand(line string, width int) (string, error) {
 	parts, err := shellwords.Parse(line)
 	if err != nil {
 		return "", fmt.Errorf("parse error: %w", err)
@@ -553,7 +593,7 @@ func (m *Model) executeCommand(line string) (string, error) {
 	}
 
 	var buf bytes.Buffer
-	ui.WithOutputAndWidth(&buf, m.commandOutputWidth(), func() {
+	ui.WithOutputAndWidth(&buf, width, func() {
 		defer func() {
 			if r := recover(); r != nil {
 				ui.PrintError(services.L.Get("error_executing", map[string]interface{}{"error": r}))
