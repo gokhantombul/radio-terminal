@@ -33,7 +33,7 @@ func NewRadioConfig() *RadioConfig {
 	return &RadioConfig{
 		Player: PlayerConfig{
 			Command: "ffplay",
-			Args:    []string{"-nodisp", "-hide_banner", "-loglevel", "quiet", "-autoexit"},
+			Args:    []string{"-nodisp", "-hide_banner", "-loglevel", "quiet", "-autoexit", "-user_agent", "VLC/3.0.16 LibVLC/3.0.16"},
 		},
 		Stations: StationsConfig{
 			File: "stations.json",
